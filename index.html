@@ -361,6 +361,20 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .fwhy{margin-top:6px;border-top:1px solid var(--line);padding-top:10px}
 .primary.big{min-height:64px;font-size:20px}
 @media (max-width:380px){.fact{font-size:60px}.fbtn{font-size:16px}.fgrid.act .fbtn{font-size:21px}}
+/* v10: versão única */
+.step{scroll-margin-top:84px}
+.fbtn.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.fbtn.no:not(.on){background:var(--check-soft);border-color:var(--check-fill)}
+.potline{margin:14px 0 0;font-size:14px;color:var(--muted);background:var(--surface-2);border-radius:10px;padding:8px 12px}
+.potline b{font-family:var(--f-mono);color:var(--ink);font-size:16px}
+.q.sm{font-size:16px;margin-top:14px}
+.step .reason{margin:10px 0 0;font-size:16px}
+.fjogo{margin:10px 0 0}
+.hist{margin-top:10px}
+.hist ol{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:6px}
+.tlbtn{width:100%;text-align:left;display:flex;gap:10px;align-items:center;border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600}
+.tlbtn span{font-size:18px;color:var(--accent)}
+.fban{scroll-margin-top:84px}
 </style>
 </head>
 <body>
@@ -368,7 +382,6 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
   <header class="top">
     <span class="logo" aria-hidden="true">♠&#xFE0E;</span>
     <h1>Outs &amp; Odds</h1>
-    <div class="seg mode" role="group" aria-label="Modo"><button type="button" data-act="mode" data-m="fast">Rápido</button><button type="button" data-act="mode" data-m="full">Completo</button></div>
     <button type="button" class="cfgbtn" id="cfgBtn" data-act="cfg"></button>
   </header>
   <div id="cfgPanel"></div>
@@ -624,6 +637,7 @@ for (let a = 0; a < 52; a++) for (let b = a + 1; b < 52; b++){ ALL_COMBOS.push([
 const BASES = {
   limp:     { name: "Só pagou o blind", set: () => parseRange("99, 88, 77, 66, 55, 44, 33, 22, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, 76s, 65s, A9o+, KTo+, QTo+, JTo") },
   callopen: { name: "Pagou um aumento", set: () => parseRange("99, 88, 77, 66, 55, 44, 33, 22, AJs, ATs, A9s, A5s, KQs, KJs, KTs, QJs, QTs, JTs, T9s, 98s, 87s, 76s, AQo, AJo, KQo") },
+  bbdef:    { name: "Defendeu o big blind", set: () => BB_DEF },
   "3bet":   { name: "Aumentou por cima (3-bet)", set: () => parseRange("TT+, AQs+, AKo, A5s-A4s, KQs") },
   call3bet: { name: "Pagou um 3-bet", set: () => parseRange("88, 99, TT, JJ, QQ, AJs, AQs, KQs, AQo, AKo") },
   "4bet":   { name: "Aumentou de novo (4-bet)", set: () => parseRange("QQ+, AKs, AKo") },
@@ -632,7 +646,6 @@ const BASES = {
 const PROFILES = ["tight", "normal", "loose", "any"];
 const baseName = k => k.startsWith("pos:") ? `Abre do ${k.slice(4)}` : BASES[k] ? BASES[k].name : VR[k].name;
 const baseSet = k => k.startsWith("pos:") ? openSet(k.slice(4)) : BASES[k] ? BASES[k].set() : VR[k].set();
-// Força da mão de um combo no board: monster, top, pair, draw, weak, air
 function classify(a, b, board){
   const n = board.length, cards = [a, b, ...board];
   const s = evalCards(cards, 2 + n), cat = s >> 20, bcat = evalCards(board, n) >> 20;
@@ -664,6 +677,7 @@ const NARROW = {
   check: { monster: 0.35, top: 0.6, pair: 1, draw: 0.8, weak: 1, air: 1 }
 };
 const ACT_NAME = { call: "pagou", bet: "apostou", raise: "aumentou", check: "deu check" };
+let RV = 0;
 function mkV(label, base){ const v = { label, base, hist: [], w: null }; recalc(v); return v; }
 function recalc(v){
   const set = baseSet(v.base), w = new Float64Array(ALL_COMBOS.length);
@@ -681,14 +695,10 @@ function recalc(v){
 }
 function vAct(v, t, board){ v.hist.push({ t, board: board.slice() }); recalc(v); }
 function vShare(v){
-  const dead = usedSet(); let s = 0;
-  for (let i = 0; i < v.w.length; i++){ if (!v.w[i]) continue; const [a, b] = ALL_COMBOS[i]; if (dead.has(a) || dead.has(b)) continue; s += v.w[i]; }
-  let tot = 0; for (let i = 0; i < ALL_COMBOS.length; i++){ const [a, b] = ALL_COMBOS[i]; if (!dead.has(a) && !dead.has(b)) tot++; }
+  const dead = usedSet(); let s = 0, tot = 0;
+  for (let i = 0; i < v.w.length; i++){ const [a, b] = ALL_COMBOS[i]; if (dead.has(a) || dead.has(b)) continue; tot++; s += v.w[i]; }
   return tot ? s / tot : 0;
 }
-let RV = 0;
-
-// Equity contra vários vilões com ranges ponderados
 function makeSimMulti(hero, board, vills){
   const bl = board.length, needBoard = 5 - bl, used = new Uint8Array(52), base = new Uint8Array(52);
   for (const c of hero) base[c] = 1; for (const c of board) base[c] = 1;
@@ -739,9 +749,9 @@ const S = {
   cfg: { sb: 1, bb: 2, stack: 200, vstack: 200, buyin: 200, players: 9 },
   pos: null, sugPos: null, editPos: true, editHand: false, showCfg: false,
   hero: [null, null], board: [null,null,null,null,null],
-  st: {}, cur: "pre", end: null, showOther: null, vrPos: null,
-  vills: [], editV: null, snap: {},
-  handStack: 200, vstackStart: 200, scrollTo: null
+  st: {}, cur: "pre", end: null, vrPos: null, vills: [], editV: null,
+  handStack: 200, vstackStart: 200, scrollTo: null,
+  ui: { more: false, custom: null, heroAmt: false, why: false, hist: false }
 };
 try {
   const sv = JSON.parse(localStorage.getItem("outsodds3") || "{}");
@@ -762,48 +772,74 @@ const effStart = () => effOf(S.handStack, S.vstackStart);
 const eff = () => effOf(S.cfg.stack, S.cfg.vstack);
 const invested = () => STREETS.reduce((t, s) => t + (S.st[s] ? S.st[s].heroStreet : 0), 0);
 const left = () => Math.max(0, r2(effStart() - invested()));
-const potNow = d => r2(d.potStart + d.heroStreet + d.villStreet + (d.extra || 0));
+const sumO = d => d.others.reduce((t, o) => t + o.a, 0);
+const potNow = d => d.others ? r2(d.heroStreet + sumO(d)) : r2(d.potStart + d.heroStreet + d.villStreet + (d.extra || 0));
 const toCall = d => Math.max(0, r2(d.villStreet - d.heroStreet));
-const fresh = d => d.log.length === 0 && (d.phase === "ask" || d.phase === "askamt");
-const nOpp = () => Math.max(1, S.vills.length);
+const nOthers = () => Math.max(1, S.cfg.players - 1);
+const nBefore = () => { const i = order().indexOf(S.pos); return Math.max(0, i < 0 ? nOthers() : i); };
+const maxCallers = () => { const i = S.vrPos ? order().indexOf(S.vrPos) : -1; return Math.max(0, i >= 0 ? nBefore() - i - 1 : nBefore() - 1); };
 
-function newStreet(s, potStart){
-  const d = { potStart: r2(potStart || 0), heroStreet: 0, villStreet: 0, extra: 0, phase: "ask", respMode: null, log: [], level: 0, heroAmt: false, limpers: 0, callers: 0, bettor: 0, pre: 0, k: null };
-  S.st[s] = d;
-  if (s === "pre") initPre(d);
-  // guarda os vilões do começo da rua, para "refazer"
-  S.snap[s] = S.vills.map(v => ({ label: v.label, base: v.base, hist: v.hist.slice() }));
-  return d;
+/* ---------- Pré-flop: cada jogador com o que colocou no pote ---------- */
+function newPre(){
+  const d = { phase: "ask", log: [], limpers: 0, raise: null, callers: 0, level: 0, heroActed: false, respMode: null, others: [] };
+  S.st.pre = d; buildPre(d); return d;
 }
-function initPre(d){
-  const p = S.pos, sb = S.cfg.sb, bb = S.cfg.bb;
+function pre(){ return S.st.pre || newPre(); }
+function buildPre(d){
+  const sb = S.cfg.sb, bb = S.cfg.bb, p = S.pos, rp = S.vrPos, L = d.limpers || 0;
   d.posted = p === "SB" ? sb : p === "BB" ? bb : 0;
   d.heroStreet = d.posted;
-  d.dead = p === "SB" ? 0 : sb;
-  d.potStart = d.dead; d.villStreet = 0; d.extra = 0;
-}
-function pre(){
-  if (!S.st.pre) newStreet("pre", 0);
-  const d = S.st.pre;
-  if (fresh(d) && d.villStreet === 0) initPre(d);
-  return d;
-}
-function restoreVills(s){ const sn = S.snap[s] || []; S.vills = sn.map(x => { const v = { label: x.label, base: x.base, hist: x.hist.slice(), w: null }; recalc(v); return v; }); }
-// Vilões no pré-flop a partir das respostas
-function setPreVills(d){
-  if (d.level === 0){
-    const n = S.pos === "BB" ? Math.max(1, d.limpers) : d.limpers;
-    S.vills = Array.from({ length: n }, (_, i) => mkV(n > 1 ? `Limper ${i + 1}` : "Limper", "limp"));
-  } else {
-    const r = mkV(S.vrPos || "Quem aumentou", S.vrPos ? "pos:" + S.vrPos : "normal");
-    S.vills = [r, ...Array.from({ length: d.callers }, (_, i) => mkV(d.callers > 1 ? `Pagou ${i + 1}` : "Pagou", "callopen"))];
+  const o = [];
+  if (p !== "SB" && S.cfg.players > 2) o.push({ w: "SB", a: sb, base: "callopen" });
+  if (p !== "BB") o.push({ w: S.cfg.players === 2 ? "BTN" : "BB", a: S.cfg.players === 2 ? sb : bb, base: "bbdef" });
+  if (S.cfg.players === 2 && p === "BTN"){ o.length = 0; o.push({ w: "BB", a: bb, base: "bbdef" }); }
+  for (let i = 0; i < L; i++) o.push({ w: L > 1 ? `Limper ${i + 1}` : "Limper", a: bb, base: "limp" });
+  if (p === "BB" && !L && !(d.raise > 0)){ const sbE = o.find(x => x.w === "SB"); if (sbE){ sbE.a = bb; sbE.base = "limp"; sbE.vol = true; } }
+  d.level = 0;
+  if (d.raise > 0){
+    const R = d.raise, bl = rp ? o.find(x => x.w === rp) : null;
+    if (bl){ bl.a = R; bl.base = "pos:" + rp; bl.raiser = true; }
+    else o.push({ w: rp || "Quem aumentou", a: R, base: rp ? "pos:" + rp : "normal", raiser: true });
+    for (let i = 0; i < (d.callers || 0); i++) o.push({ w: d.callers > 1 ? `Pagou ${i + 1}` : "Pagou", a: R, base: "callopen", vol: true });
+    d.level = 1;
   }
+  d.others = o; syncPre(d); preVills(d);
+}
+function syncPre(d){ d.villStreet = d.others.reduce((m, o) => Math.max(m, o.a), 0); }
+// Quem conta como adversário agora: quem colocou fichas voluntariamente
+function preVills(d){
+  const act = d.others.filter(o => !o.folded && (o.base !== "callopen" && o.base !== "bbdef" ? true : o.vol));
+  const list = d.others.filter(o => !o.folded && (o.raiser || o.base === "limp" || o.w.startsWith("Pagou") || o.vol));
+  S.vills = list.map(o => mkV(o.w, o.base));
+}
+function preSummary(d){
+  const sb = S.cfg.sb, bb = S.cfg.bb, parts = [];
+  const blinds = d.others.filter(o => (o.w === "SB" || o.w === "BB") && !o.raiser && !o.vol).reduce((t, o) => t + o.a, 0) + (S.pos === "SB" || S.pos === "BB" ? d.posted : 0);
+  if (!d.heroActed){
+    parts.push(`blinds ${money(sb + bb)}`);
+    if (d.limpers) parts.push(`${d.limpers} limper${d.limpers > 1 ? "s" : ""} × ${money(bb)}`);
+    if (d.raise) parts.push(`aumento ${money(d.raise)}`);
+    if (d.raise && d.callers) parts.push(`${d.callers} call${d.callers > 1 ? "s" : ""} × ${money(d.raise)}`);
+    return `${parts.join(" + ")} = <b>${money(potNow(d))}</b>`;
+  }
+  return `você ${money(d.heroStreet)} + outros ${money(sumO(d))} = <b>${money(potNow(d))}</b>`;
+}
+function topOthers(d, k, exclude){
+  const idx = d.others.map((o, i) => i).filter(i => !d.others[i].folded && !(exclude && exclude(d.others[i])));
+  idx.sort((x, y) => (d.others[y].a - d.others[x].a) || ((d.others[y].raiser ? 1 : 0) - (d.others[x].raiser ? 1 : 0)) || (y - x));
+  return idx.slice(0, k);
+}
+
+/* ---------- Ruas depois do flop ---------- */
+function newStreet(s, potStart){
+  const d = { potStart: r2(potStart || 0), heroStreet: 0, villStreet: 0, extra: 0, phase: "ask", respMode: null, log: [], bettor: 0, pre: 0 };
+  S.st[s] = d; return d;
 }
 
 /* ---------- Simulação (cache) ---------- */
 const cache = new Map(); let running = null;
 function eqFor(hero, board, vills){
-  const key = hero.join(",") + "|" + board.join(",") + "|" + (vills ? "v" + RV + ":" + vills.length : "any");
+  const key = hero.join(",") + "|" + board.join(",") + "|" + (vills && vills.length ? "v" + RV + ":" + vills.length : "any");
   if (cache.has(key)) return cache.get(key);
   if (!running || running.key !== key){
     const tok = { key }; running = tok;
@@ -844,29 +880,29 @@ function callInfo(d){ const L = left(), tc = toCall(d); return { add: Math.min(t
 function preMode(d){ return d.level === 0 ? (S.pos === "BB" ? "limp" : "open") : d.level === 1 ? "vsraise" : d.level === 2 ? "vs3bet" : "vs4bet"; }
 function verdictPre(d){
   const code = handCode(S.hero[0], S.hero[1]), bb = S.cfg.bb, p = S.pos, V = d.villStreet, mode = preMode(d);
-  const act = chartAction(code, mode, p), lim = d.limpers || 0;
+  const act = chartAction(code, mode, p), lim = d.limpers || 0, cl = d.callers || 0;
   if (mode === "limp") return act === "raise"
     ? { action: "Raise", ...sized(d, (4 + lim) * bb), mode, reason: `Ninguém aumentou e você está no big blind. ${code} é forte: aumente.` }
     : { action: "Check", mode, reason: `Ninguém aumentou e você já pagou o big blind: dê check e veja o flop de graça.` };
   if (mode === "open") return act === "raise"
-    ? { action: "Raise", ...sized(d, (3 + lim) * bb), mode, reason: `${code} é boa para jogar do ${p} numa mesa de ${S.cfg.players}. Entre aumentando${lim ? ` (1 BB a mais para cada um dos ${lim} que só pagaram o blind)` : ""}.` }
+    ? { action: "Raise", ...sized(d, (3 + lim) * bb), mode, reason: `${code} é boa para jogar do ${p} numa mesa de ${S.cfg.players}. Entre aumentando${lim ? ` (1 BB a mais para cada limper)` : ""}.` }
     : { action: "Fold", mode, reason: `${code} não é boa o bastante para jogar do ${p} numa mesa de ${S.cfg.players}. Largue a mão.` };
-  const ci = callInfo(d), cl = d.callers || 0;
+  const ci = callInfo(d);
   if (mode === "vsraise"){
-    if (act === "raise") return { action: "Raise", ...sized(d, (3 + cl) * V), mode, reason: `Aumentaram para ${money(V)}${cl ? ` e ${cl} já pagaram` : ""}, mas ${code} está entre as melhores mãos: aumente de novo (3-bet).` };
+    if (act === "raise") return { action: "Raise", ...sized(d, (3 + cl) * V + lim * bb), mode, reason: `Aumentaram para ${money(V)}, mas ${code} está entre as melhores mãos: aumente de novo (3-bet).` };
     if (act === "call") return { action: "Call", ...ci, mode, reason: `${code} joga bem, mas não para aumentar de novo. Pague e veja o flop.` };
     return { action: "Fold", mode, reason: `Contra um aumento, ${code} perde dinheiro no longo prazo. Largue.` };
   }
   if (mode === "vs3bet"){
-    if (act === "raise") return { action: "Raise", ...sized(d, 2.3 * V), mode, reason: `Aumentaram por cima de você para ${money(V)}. ${code} é das mais fortes: aumente de novo (4-bet).` };
-    if (act === "call") return { action: "Call", ...ci, mode, reason: `Aumentaram por cima de você (3-bet). ${code} é boa para pagar e ver o flop, mas não para aumentar de novo.` };
-    return { action: "Fold", mode, reason: `Aumentaram por cima de você (3-bet). Contra isso, ${code} não aguenta: largue.` };
+    if (act === "raise") return { action: "Raise", ...sized(d, 2.3 * V), mode, reason: `Aumentaram por cima para ${money(V)}. ${code} é das mais fortes: aumente de novo (4-bet).` };
+    if (act === "call") return { action: "Call", ...ci, mode, reason: `Aumentaram por cima (3-bet). ${code} é boa para pagar e ver o flop, mas não para aumentar de novo.` };
+    return { action: "Fold", mode, reason: `Aumentaram por cima (3-bet). Contra isso, ${code} não aguenta: largue.` };
   }
   if (act === "raise") return { action: "Raise", ...sized(d, effStart()), mode, reason: `Já é a terceira vez que aumentam. Com ${code}, vá all-in.` };
   return { action: "Fold", mode, reason: `Já aumentaram de novo por cima (4-bet ou mais). Isso costuma ser AA, KK ou AK. Largue ${code}.` };
 }
 function verdictPost(d, e){
-  const P = potNow(d), tc = toCall(d), opps = nOpp(), fair = 1 / (opps + 1), eq = e.eq;
+  const P = potNow(d), tc = toCall(d), opps = Math.max(1, S.vills.length), fair = 1 / (opps + 1), eq = e.eq;
   if (tc > 0){
     const ci = callInfo(d), req = ci.add / (P + ci.add), base = { req, eq, hasBet: true };
     if (eq >= req){
@@ -901,64 +937,106 @@ function getVerdict(s){
   const e = eqFor(S.hero, boardFor(s), S.vills); if (!e) return "calc";
   return { ...verdictPost(d, e), e };
 }
+function defaultTo(s, d){
+  const bb = S.cfg.bb, tc = toCall(d), P = potNow(d);
+  if (s === "pre"){
+    if (d.level === 0) return ((S.pos === "BB" ? 4 : 3) + (d.limpers || 0)) * bb;
+    if (d.level === 1) return 3 * d.villStreet;
+    if (d.level === 2) return 2.3 * d.villStreet;
+    return d.heroStreet + left();
+  }
+  return tc > 0 ? 3 * d.villStreet : r2(d.villStreet + P * 0.66);
+}
 
-/* ---------- Ações ---------- */
-function heroAct(t, to){
-  const s = S.cur, d = S.st[s];
+/* ---------- Ações no pré-flop ---------- */
+const lvlBase = lv => lv <= 1 ? "callopen" : lv === 2 ? "call3bet" : "call4bet";
+function preHero(t, to){
+  const d = S.st.pre;
+  d.heroActed = true; S.ui.heroAmt = false;
   if (t === "fold"){ d.log.push({ w: "hero", t: "Você largou" }); return endHand("fold"); }
+  if (t === "check"){ d.log.push({ w: "hero", t: "Você deu check" }); return finishPre(); }
   if (t === "call"){
     const ci = callInfo(d); d.heroStreet = r2(d.heroStreet + ci.add);
-    d.log.push({ w: "hero", t: s === "pre" && d.level === 0 ? `Você só pagou o blind (${money(ci.add)})` : `Você pagou ${money(ci.add)}${ci.allin ? " (all-in)" : ""}` });
-    if (s === "pre" && d.level === 0 && !S.vills.length) S.vills = [mkV("Vilão", "normal")];
-    return streetDone();
+    d.log.push({ w: "hero", t: d.level === 0 ? `Você só pagou o blind (${money(ci.add)})` : `Você pagou ${money(ci.add)}${ci.allin ? " (all-in)" : ""}` });
+    const pend = d.others.filter(o => !o.folded && o.a < d.villStreet);
+    if (pend.length){ d.phase = "callpre"; S.scrollTo = "q-pre"; return; }
+    return finishPre();
   }
-  if (t === "check"){
-    d.log.push({ w: "hero", t: "Você deu check" });
-    if (s === "pre"){ if (!S.vills.length) S.vills = [mkV("Limper", "limp")]; return streetDone(); }
-    d.phase = "resp"; d.respMode = "check"; d.respAsk = null; S.scrollTo = "q-" + s; return;
-  }
-  const z = sized(d, to), wasBet = toCall(d) === 0 && s !== "pre";
-  d.heroStreet = z.to;
-  if (s === "pre") d.level++;
-  d.log.push({ w: "hero", t: `${wasBet ? "Você apostou" : "Você aumentou para"} ${money(z.to)}${z.allin || left() <= 0 ? " (all-in)" : ""}` });
-  d.phase = "resp"; d.respMode = "bet"; d.respAsk = null; d.k = null; d.heroAmt = false; S.scrollTo = "q-" + s;
+  const z = sized(d, to);
+  d.heroStreet = z.to; d.level++;
+  d.log.push({ w: "hero", t: `Você aumentou para ${money(z.to)}${z.allin ? " (all-in)" : ""}` });
+  d.phase = "resp"; d.respMode = "bet"; d.respAsk = null; S.scrollTo = "q-pre";
 }
-// Respostas dos vilões
-function respCalled(k){
+// Depois do seu aumento: k pagaram (os que mais colocaram primeiro)
+function preCalled(k){
+  const d = S.st.pre, T = d.heroStreet, base = lvlBase(d.level);
+  const chosen = topOthers(d, k);
+  d.others.forEach((o, i) => { if (chosen.includes(i)){ o.a = T; o.base = o.w === "BB" && d.level === 1 ? "bbdef" : base; o.vol = true; } else if (!o.folded) o.folded = true; });
+  for (let i = chosen.length; i < k; i++) d.others.push({ w: `Jogador ${i + 1}`, a: T, base, vol: true });
+  syncPre(d);
+  d.log.push({ w: "vil", t: k > 1 ? `${k} pagaram` : "1 pagou" });
+  finishPre();
+}
+function preOver(x){
+  const d = S.st.pre, i = topOthers(d, 1)[0];
+  const o = i != null ? d.others[i] : (d.others.push({ w: "Quem aumentou", a: 0 }), d.others[d.others.length - 1]);
+  d.others.forEach(q => { if (q !== o && !q.folded && q.a < d.heroStreet) q.folded = true; });
+  d.level++; o.a = r2(x); o.base = d.level >= 3 ? "4bet" : "3bet"; o.vol = true; o.raiser = true;
+  syncPre(d);
+  d.log.push({ w: "vil", t: `${o.w} aumentou por cima para ${money(x)}` });
+  d.phase = "decide"; d.respMode = null; S.scrollTo = "res-pre";
+}
+// Depois do seu call: quantos dos que estavam com menos fichas também pagaram
+function preCallers(k){
+  const d = S.st.pre, V = d.villStreet;
+  const pend = topOthers(d, 99, o => o.a >= V);
+  pend.forEach((i, j) => { const o = d.others[i]; if (j < k){ o.a = V; o.vol = true; if (o.base === "limp" && d.level >= 1) o.base = "callopen"; } else o.folded = true; });
+  syncPre(d);
+  d.log.push({ w: "vil", t: k ? `Mais ${k} pagaram` : "Os outros largaram" });
+  finishPre();
+}
+function finishPre(){
+  const d = S.st.pre, V = d.villStreet;
+  d.phase = "done";
+  const inHand = d.others.filter(o => !o.folded && o.a >= V && (o.vol || o.raiser || o.base === "limp" || (o.w === "BB" && d.level === 0)));
+  S.vills = inHand.map(o => mkV(o.w, o.base === "bbdef" && d.level === 0 ? "any" : o.base));
+  if (!S.vills.length) S.vills = [mkV("Vilão", "normal")];
+  if (left() <= 0) return endHand("allin");
+  newStreet("flop", potNow(d)); S.cur = "flop"; S.scrollTo = "st-flop";
+}
+
+/* ---------- Ações depois do flop ---------- */
+function postHero(t, to){
+  const s = S.cur, d = S.st[s]; S.ui.heroAmt = false;
+  if (t === "fold"){ d.log.push({ w: "hero", t: "Você largou" }); return endHand("fold"); }
+  if (t === "call"){ const ci = callInfo(d); d.heroStreet = r2(d.heroStreet + ci.add); d.log.push({ w: "hero", t: `Você pagou ${money(ci.add)}${ci.allin ? " (all-in)" : ""}` }); return streetDone(); }
+  if (t === "check"){ d.log.push({ w: "hero", t: "Você deu check" }); d.phase = "resp"; d.respMode = "check"; d.respAsk = null; S.scrollTo = "q-" + s; return; }
+  const z = sized(d, to), wasBet = toCall(d) === 0;
+  d.heroStreet = z.to;
+  d.log.push({ w: "hero", t: `${wasBet ? "Você apostou" : "Você aumentou para"} ${money(z.to)}${z.allin ? " (all-in)" : ""}` });
+  d.phase = "resp"; d.respMode = "bet"; d.respAsk = null; S.scrollTo = "q-" + s;
+}
+function postCalled(k){
   const s = S.cur, d = S.st[s], T = d.heroStreet, board = boardFor(s);
-  k = Math.max(1, k || 1);
-  if (s === "pre"){
-    const base = d.level <= 1 ? "callopen" : d.level === 2 ? "call3bet" : "call4bet";
-    const old = S.vills;
-    S.vills = Array.from({ length: k }, (_, i) => old[i] ? (old[i].base = base, old[i].hist = [], recalc(old[i]), old[i]) : mkV(k > 1 ? `Pagou ${i + 1}` : "Quem pagou", base));
-    d.extra = r2((k - 1) * T + Math.max(0, (d.limpers || 0) - k) * S.cfg.bb);
-  } else {
-    S.vills = S.vills.slice(0, k);
-    while (S.vills.length < k) S.vills.push(mkV(`Jogador ${S.vills.length + 1}`, "normal"));
-    S.vills.forEach(v => vAct(v, "call", board));
-    d.extra = r2((d.extra || 0) + (k - 1) * T);
-  }
+  k = Math.max(1, k);
+  S.vills = S.vills.slice(0, k);
+  while (S.vills.length < k) S.vills.push(mkV(`Jogador ${S.vills.length + 1}`, "normal"));
+  S.vills.forEach(v => vAct(v, "call", board));
+  d.extra = r2((d.extra || 0) + (k - 1) * T);
   d.villStreet = T;
-  d.log.push({ w: "vil", t: k > 1 ? `${k} pagaram` : "Pagaram" });
+  d.log.push({ w: "vil", t: k > 1 ? `${k} pagaram` : "Pagou" });
   streetDone();
 }
-function respOver(x, who){
+function postOver(x, who){
   const s = S.cur, d = S.st[s], board = boardFor(s);
   d.villStreet = r2(x);
-  let v = S.vills[who || 0];
-  if (s === "pre"){
-    d.level++;
-    v = mkV(v ? v.label : "Quem aumentou", d.level >= 3 ? "4bet" : "3bet");
-  } else {
-    if (!v) v = mkV("Vilão", "normal");
-    vAct(v, "raise", board);
-  }
-  S.vills = [v];
-  d.extra = 0;
+  let v = S.vills[who || 0] || mkV("Vilão", "normal");
+  vAct(v, "raise", board);
+  S.vills = [v]; d.extra = 0;
   d.log.push({ w: "vil", t: `${v.label} aumentou por cima para ${money(x)}` });
-  d.phase = "decide"; d.respMode = null; S.showOther = null; S.scrollTo = "res-" + s;
+  d.phase = "decide"; d.respMode = null; S.scrollTo = "res-" + s;
 }
-function respChecked(){
+function postChecked(){
   const s = S.cur, d = S.st[s];
   S.vills.forEach(v => vAct(v, "check", boardFor(s)));
   d.log.push({ w: "vil", t: "Todos deram check" });
@@ -970,37 +1048,16 @@ function villBet(x, who, callers){
   who = Math.min(who || 0, S.vills.length - 1);
   const bettor = S.vills[who];
   vAct(bettor, "bet", board);
-  const others = S.vills.filter((_, i) => i !== who);
-  const c = Math.min(callers || 0, others.length);
+  const others = S.vills.filter((_, i) => i !== who), c = Math.min(callers || 0, others.length);
   others.slice(0, c).forEach(v => vAct(v, "call", board));
   S.vills = [bettor, ...others];
   d.villStreet = r2(x); d.extra = r2((d.extra || 0) + c * x);
   d.log.push({ w: "vil", t: `${bettor.label} apostou ${money(x)}${c ? ` e ${c} ${c > 1 ? "pagaram" : "pagou"} antes de você` : ""}` });
-  d.phase = "decide"; d.respMode = null; S.showOther = null; S.scrollTo = "res-" + s;
-}
-function answerNo(){
-  const s = S.cur, d = s === "pre" ? pre() : S.st[s];
-  if (s === "pre"){
-    initPre(d); d.villStreet = S.cfg.bb; d.level = 0; d.callers = 0; S.vrPos = null;
-    d.extra = r2((d.limpers || 0) * S.cfg.bb - (S.pos === "BB" && d.limpers ? S.cfg.bb : 0));
-    setPreVills(d);
-    d.log = [{ w: "vil", t: d.limpers ? `Ninguém aumentou; ${d.limpers} ${d.limpers > 1 ? "só pagaram" : "só pagou"} o blind` : "Ninguém aumentou" }];
-  } else d.log = [{ w: "vil", t: "Ninguém apostou" }];
-  d.phase = "decide"; S.showOther = null; S.scrollTo = "res-" + s;
-}
-function answerPreRaise(x){
-  const d = pre();
-  initPre(d);
-  if (S.pos !== "BB") d.potStart = r2(d.dead + S.cfg.bb);
-  d.villStreet = r2(x); d.level = 1; d.limpers = 0;
-  d.extra = r2((d.callers || 0) * x);
-  setPreVills(d);
-  d.log = [{ w: "vil", t: `${S.vrPos ? S.vrPos + " aumentou" : "Aumentaram"} para ${money(x)}${d.callers ? ` e ${d.callers} ${d.callers > 1 ? "pagaram" : "pagou"}` : ""}` }];
-  d.phase = "decide"; S.showOther = null; S.scrollTo = "res-pre";
+  d.phase = "decide"; d.respMode = null; S.scrollTo = "res-" + s;
 }
 function streetDone(){
   const s = S.cur, d = S.st[s];
-  d.phase = "done"; S.showOther = null; S.editV = null;
+  d.phase = "done";
   if (s === "river") return endHand("showdown");
   if (left() <= 0) return endHand("allin");
   const n = NEXT[s];
@@ -1021,29 +1078,41 @@ function applyResult(back){
   if (S.vills.length <= 1 && S.vstackStart > 0) S.cfg.vstack = Math.max(0, r2(S.vstackStart - e.net));
   save();
 }
-function undoEnd(){
-  if (S.end && S.end.done){ S.cfg.stack = S.handStack; S.cfg.vstack = S.vstackStart; save(); }
-  S.end = null;
-}
 function newHand(){
   const p = S.pos;
-  S.hero = [null, null]; S.board = [null,null,null,null,null]; S.st = {}; S.snap = {}; S.cur = "pre"; S.end = null; S.showOther = null;
+  S.hero = [null, null]; S.board = [null,null,null,null,null]; S.st = {}; S.cur = "pre"; S.end = null;
   S.editHand = false; S.vrPos = null; S.vills = []; S.editV = null;
+  S.ui = { more: false, custom: null, heroAmt: false, why: false, hist: false };
   S.handStack = S.cfg.stack; S.vstackStart = S.cfg.vstack;
-  if (p){ S.sugPos = nextPos(p); S.pos = null; }
-  S.editPos = true; S.scrollTo = "st-pos";
+  TL.length = 0;
+  if (p){ S.pos = nextPos(p); S.sugPos = null; S.editPos = false; S.autoPos = true; save(); }
+  else S.editPos = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
-function resetStreet(s){
-  undoEnd();
-  const i = STREETS.indexOf(s);
-  STREETS.slice(i + 1).forEach(x => { delete S.st[x]; delete S.snap[x]; });
-  for (let k = NBOARD[s]; k < 5; k++) S.board[k] = null;
-  const old = S.st[s];
-  restoreVills(s);
-  if (s === "pre"){ newStreet("pre", 0); S.vrPos = null; S.vills = []; }
-  else { const keep = S.vills; newStreet(s, old.potStart); S.vills = keep; }
-  S.cur = s; S.showOther = null; S.editV = null; S.scrollTo = "st-" + s;
+
+/* ---------- Histórico: voltar para qualquer ponto ---------- */
+const TL = [];
+function snapState(){
+  return JSON.stringify({ pos: S.pos, sugPos: S.sugPos, editPos: S.editPos, editHand: S.editHand, hero: S.hero, board: S.board, st: S.st, cur: S.cur, end: S.end, vrPos: S.vrPos,
+    vills: S.vills.map(v => ({ label: v.label, base: v.base, hist: v.hist })), handStack: S.handStack, vstackStart: S.vstackStart, stack: S.cfg.stack, vstack: S.cfg.vstack, autoPos: S.autoPos });
 }
+function restoreState(js){
+  const o = JSON.parse(js);
+  ["pos","sugPos","editPos","editHand","hero","board","st","cur","end","vrPos","handStack","vstackStart","autoPos"].forEach(k => S[k] = o[k]);
+  S.cfg.stack = o.stack; S.cfg.vstack = o.vstack;
+  S.vills = o.vills.map(x => { const v = { label: x.label, base: x.base, hist: x.hist, w: null }; recalc(v); return v; });
+  S.ui.custom = null; S.ui.heroAmt = false; S.editV = null;
+  save();
+}
+const NO_TL = new Set(["undo","tl","cfg","editv","more","custom","heroask","why","hist","players","new"]);
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b || b.disabled || NO_TL.has(b.dataset.act)) return;
+  let label = (b.getAttribute("aria-label") || b.textContent || "").replace(/\s+/g, " ").trim();
+  if (b.dataset.act === "card") label = "Carta " + label.replace(/ de .*/, "") + " " + SUITS[+b.dataset.c & 3];
+  const where = !S.pos || S.editPos ? "Posição" : !heroOK() || S.editHand ? "Cartas" : S.end ? "Fim" : SNAME[S.cur];
+  TL.push({ label: `${where}: ${label}`.slice(0, 60), snap: snapState() });
+  if (TL.length > 80) TL.shift();
+}, true);
 
 /* ---------- Seleção de cartas ---------- */
 function target(){
@@ -1054,7 +1123,7 @@ function target(){
 function placeCard(c){
   const t = target();
   if (!t || usedSet().has(c)) return;
-  if (t.k === "hero"){ S.hero[t.i] = c; if (heroOK()){ S.editHand = false; S.scrollTo = "st-" + S.cur; } }
+  if (t.k === "hero"){ S.hero[t.i] = c; if (heroOK()){ S.editHand = false; S.autoPos = false; if (S.st.pre) buildPre(S.st.pre); S.scrollTo = "st-" + S.cur; } }
   else { S.board[t.i] = c; if (streetCardsOK(S.cur)) S.scrollTo = "q-" + S.cur; }
 }
 
@@ -1081,56 +1150,49 @@ function pickerHTML(label){
   }
   return `<div class="picker"><p class="pick-hint">Escolhendo: <b>${label}</b>. Toque na carta.</p><div class="deck">${rows}</div></div>`;
 }
-function amtOpts(kind){
-  const s = S.cur, d = s === "pre" ? pre() : S.st[s], bb = S.cfg.bb, P = potNow(d), L = left(), opts = [];
-  if (kind === "open"){
-    if (s === "pre") [2.5, 3, 4, 5, 6, 8].forEach(x => opts.push({ v: r2(x * bb), l: `${fmtNum(x)} BB` }));
-    else { [[1/3,"⅓ do pote"],[0.5,"½ pote"],[0.66,"⅔ do pote"],[1,"1 pote"],[1.5,"1,5 pote"]].forEach(([f, l]) => opts.push({ v: r2(P * f), l })); opts.push({ v: r2(L), l: "all-in" }); }
-  } else if (kind === "over" || (kind === "hero" && toCall(d) > 0)){
-    const base = kind === "over" ? d.heroStreet : d.villStreet;
-    [2.5, 3, 4].forEach(x => opts.push({ v: r2(base * x), l: `${fmtNum(x)}x` }));
-    opts.push({ v: r2(d.heroStreet + L), l: "all-in" });
-  } else {
-    if (s === "pre") [2.5, 3, 4, 5].forEach(x => opts.push({ v: r2(x * bb), l: `${fmtNum(x)} BB` }));
-    else [[1/3,"⅓ do pote"],[0.5,"½ pote"],[0.66,"⅔ do pote"],[1,"1 pote"]].forEach(([f, l]) => opts.push({ v: r2(d.villStreet + P * f), l }));
-    opts.push({ v: r2(d.heroStreet + L), l: "all-in" });
-  }
-  const seen = new Set();
-  return opts.filter(o => o.v > 0 && !seen.has(o.v) && seen.add(o.v));
-}
-function amtHTML(kind){
-  const opts = amtOpts(kind), act = kind === "hero" ? "heroamt" : kind === "over" ? "overamt" : "openamt";
-  return `<div class="amts">${opts.map(o => `<button type="button" class="amt" data-act="${act}" data-v="${o.v}"><b>${money(o.v)}</b><small>${o.l}</small></button>`).join("")}</div>
-    <div class="custom"><label for="amt-${act}">Outro valor:</label><input class="inp" id="amt-${act}" type="text" inputmode="decimal" autocomplete="off" placeholder="digite"><button type="button" class="amt" style="min-height:50px;padding:0 14px" data-act="${act}" data-custom="1"><b>OK</b></button></div>`;
-}
+const ACTLBL = { limpers: n => n === 1 ? "limper" : "limpers", callers: n => n === 1 ? "pagou o aumento" : "pagaram o aumento", precall: n => n === 1 ? "pagou antes de você" : "pagaram antes de você" };
 function countChips(act, from, to, sel, fmt){
-  let h = ""; for (let i = from; i <= to; i++) h += `<button type="button" class="chip ${sel === i ? "sel" : ""}" data-act="${act}" data-n="${i}">${fmt ? fmt(i) : i}</button>`;
+  let h = ""; for (let i = from; i <= to; i++) h += `<button type="button" class="chip ${sel === i ? "sel" : ""}" data-act="${act}" data-n="${i}" aria-label="${i} ${ACTLBL[act] ? ACTLBL[act](i) : ""}">${fmt ? fmt(i) : i}</button>`;
   return `<div class="chips">${h}</div>`;
 }
-function whoChips(act, sel){
-  return `<div class="chips">${S.vills.map((v, i) => `<button type="button" class="chip ${sel === i ? "sel" : ""}" data-act="${act}" data-n="${i}">${v.label}</button>`).join("")}</div>`;
+function whoChips(act, sel){ return `<div class="chips">${S.vills.map((v, i) => `<button type="button" class="chip ${sel === i ? "sel" : ""}" data-act="${act}" data-n="${i}">${v.label}</button>`).join("")}</div>`; }
+function fbtn(act, k, label, sub, extra = "", cls = ""){
+  return `<button type="button" class="fbtn ${cls}" data-act="${act}" data-k="${k}" ${extra} aria-label="${label}${sub ? " " + sub : ""}">${label}${sub ? `<small>${sub}</small>` : ""}</button>`;
 }
-// Painel "Na mão": quem ainda joga e o range de cada um
-function villsHTML(s){
-  const vs = S.vills;
-  let h = `<div class="inhand"><div class="inhand-top"><span class="ttl">Na mão: você + ${vs.length}</span>
-    <div class="stepper sm"><button type="button" data-act="vcount" data-d="-1" aria-label="Um a menos">−</button><output>${vs.length}</output><button type="button" data-act="vcount" data-d="1" aria-label="Um a mais">+</button></div></div>
-    <div class="vlist">${vs.map((v, i) => `<button type="button" class="vchip ${S.editV === i ? "sel" : ""}" data-act="editv" data-n="${i}"><b>${v.label}</b><span>${pct(vShare(v))} das mãos</span><small>${v.hist.length ? v.hist.map(x => ACT_NAME[x.t]).join(", ") : baseName(v.base)}</small></button>`).join("")}</div>`;
-  if (S.editV != null && vs[S.editV]){
-    const v = vs[S.editV];
-    h += `<p class="qhelp" style="margin:10px 0 6px">Como o <b>${v.label}</b> joga? O app mantém o que ele já fez na mão.</p>
-      <div class="chips">${[...(v.base.startsWith("pos:") || BASES[v.base] ? [v.base] : []), ...PROFILES].map(k => `<button type="button" class="chip ${v.base === k ? "sel" : ""}" data-act="vbase" data-k="${k}">${baseName(k)}<small>${pct(rangePct(baseSet(k)))} das mãos</small></button>`).join("")}</div>`;
-  }
-  h += `<p class="help" style="margin-top:8px">Alguém largou ou entrou? Ajuste no − e +. Toque num jogador para dizer se ele é apertado ou solto.</p></div>`;
-  return h;
+function customRow(act, k){
+  return `<div class="custom"><input class="inp" id="famt" type="text" inputmode="decimal" autocomplete="off" placeholder="valor"><button type="button" class="fbtn ok" data-act="${act}" data-k="${k}" data-custom="1">OK</button></div>`;
+}
+function amtRow(act, k, list, sel){
+  return `<div class="fgrid">${list.map(o => fbtn(act, k, o.big, o.sub, `data-v="${o.v}"`, sel === o.v ? "on" : "")).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="${act}-${k}">Outro valor</button></div>${S.ui.custom === `${act}-${k}` ? customRow(act, k) : ""}`;
+}
+function potFracs(P, L, withAllin = true){
+  const l = [[1/3,"⅓ pote"],[0.5,"½ pote"],[0.66,"⅔ pote"],[1,"pote"]].map(([f, t]) => ({ v: r2(P * f), big: money(r2(P * f)), sub: t }));
+  if (withAllin && L > 0) l.push({ v: r2(L), big: "All-in", sub: money(L) });
+  return l;
 }
 function cfgBtnHTML(){ return `⚙︎ <b>${fmtNum(S.cfg.sb, 2)}/${fmtNum(S.cfg.bb, 2)}</b> · ${S.cfg.players} jog. · <b>${fmtNum(S.cfg.stack, 0)}</b>`; }
+function barHTML(){
+  const d = S.st[S.cur], brd = S.board.filter(c => c != null);
+  const hero = heroOK() ? `<span class="mini">${miniCard(S.hero[0])}${miniCard(S.hero[1])}</span>` : `<span class="fb-empty">cartas</span>`;
+  return `<div class="fbar"><div class="fbar-row">
+    <button type="button" class="fb-pos" data-act="editpos" aria-label="Trocar posição">${S.pos || "—"}</button>
+    <button type="button" class="fb-cards" data-act="edithand" aria-label="Trocar cartas">${hero}</button>
+    ${brd.length ? `<span class="mini fb-board">${brd.map(miniCard).join("")}</span>` : ""}
+    <span class="fb-pot">${d && heroOK() ? `pote<b>${money(potNow(d))}</b>` : ""}</span>
+    <button type="button" class="fb-undo" data-act="undo" ${TL.length ? "" : "disabled"} aria-label="Desfazer o último toque">↶</button>
+  </div></div>`;
+}
+function histHTML(){
+  if (!TL.length) return "";
+  return `<div class="hist"><button type="button" class="linkbtn" data-act="hist">${S.ui.hist ? "▾" : "▸"} Histórico da mão (${TL.length}) · voltar para um ponto</button>
+    ${S.ui.hist ? `<ol>${TL.map((x, i) => `<li><button type="button" class="tlbtn" data-act="tl" data-i="${i}"><span>↶</span>${x.label}</button></li>`).join("")}</ol><p class="help">Toque num item para voltar para antes dele.</p>` : ""}</div>`;
+}
 function logHTML(d){ return d.log.length ? `<ol class="alog">${d.log.map(x => `<li class="${x.w}">${x.t}</li>`).join("")}</ol>` : ""; }
 
 function render(){
   $("cfgBtn").innerHTML = cfgBtnHTML();
   $("cfgPanel").innerHTML = S.showCfg ? cfgHTML() : "";
-  let h = "";
+  let h = S.pos && !S.editPos ? barHTML() : "";
   if (!S.pos || S.editPos){
     const sel = S.pos, seats = seatsList(), n = seats.length;
     const btnAng = 90 - 360 / n, dA = (btnAng + 180 / n * 0.6) * Math.PI / 180;
@@ -1141,96 +1203,112 @@ function render(){
       <p class="qhelp">Toque no seu lugar. O <b>D</b> é o dealer (botão).</p>
       <div class="ptable ${n >= 7 ? "many" : ""}"><div class="oval">${sel || S.sugPos ? "" : "Toque no seu lugar"}</div>${seats.map((p, i) => {
         const a = (btnAng + i * 360 / n) * Math.PI / 180, x = 50 + 44 * Math.cos(a), y = 50 + 42 * Math.sin(a);
-        return `<button type="button" class="pseat ${sel === p ? "sel" : ""} ${!sel && S.sugPos === p ? "sug" : ""}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%" data-act="pos" data-p="${p}"><b>${p}</b><small>${n === 2 && p === "BTN" ? "Botão/SB" : POS_SHORT[p]}</small></button>`;
+        return `<button type="button" class="pseat ${sel === p ? "sel" : ""} ${!sel && S.sugPos === p ? "sug" : ""}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%" data-act="pos" data-p="${p}" aria-label="Posição ${p}"><b>${p}</b><small>${n === 2 && p === "BTN" ? "Botão/SB" : POS_SHORT[p]}</small></button>`;
       }).join("")}<span class="dealer" style="left:${(50 + 30 * Math.cos(dA)).toFixed(2)}%;top:${(50 + 26 * Math.sin(dA)).toFixed(2)}%">D</span></div>
-      ${!sel && S.sugPos ? `<p class="posinfo">O botão anda uma cadeira a cada mão. Se você não trocou de lugar, agora você está no <b>${S.sugPos}</b>.</p><button type="button" class="primary" data-act="pos" data-p="${S.sugPos}">Estou no ${S.sugPos} (${posName(S.sugPos)})</button>` : ""}
     </section>`;
     $("flow").innerHTML = h; afterRender(); return;
   }
-  h += `<section class="step done" id="st-pos"><div class="sumrow"><span class="badge">1</span><span class="what">${S.pos}</span><span class="muted">${posName(S.pos)} · mesa de ${S.cfg.players}</span><button type="button" class="link" data-act="editpos">trocar</button></div></section>`;
+  if (S.autoPos && !heroOK()) h += `<p class="fnote">O botão andou: agora você está no <b>${S.pos}</b> (${posName(S.pos)}). Se mudou de lugar, toque em <b>${S.pos}</b> lá em cima.</p>`;
   if (!heroOK() || S.editHand){
     const t = target();
     h += `<section class="step cur" id="st-hand"><div class="sh"><span class="badge">2</span><h2>Suas 2 cartas</h2></div>
       <div class="felt-strip"><span class="lbl">Sua mão</span>${slotHTML(S.hero[0], "Carta 1", { k: "hero", i: 0 })}${slotHTML(S.hero[1], "Carta 2", { k: "hero", i: 1 })}</div>
-      ${t ? pickerHTML(t.i === 0 ? "carta 1" : "carta 2") : ""}
-      ${heroOK() ? `<button type="button" class="primary" data-act="handok">Pronto</button>` : ""}
+      ${t ? pickerHTML(t.i === 0 ? "carta 1" : "carta 2") : `<button type="button" class="primary" data-act="handok">Pronto</button>`}
     </section>`;
     $("flow").innerHTML = h; afterRender(); return;
   }
-  const code = handCode(S.hero[0], S.hero[1]);
-  h += `<section class="step done" id="st-hand"><div class="sumrow"><span class="badge">2</span><span class="mini">${miniCard(S.hero[0])}${miniCard(S.hero[1])}</span><span class="what">${code}</span><span class="muted">${codeText(code)}</span><button type="button" class="link" data-act="edithand">trocar</button></div></section>`;
   pre();
-  let num = 3;
+  h += histHTML();
+  let num = 1;
   for (const s of STREETS){
     const d = S.st[s]; if (!d) break;
-    if (s !== S.cur || S.end){ h += doneStreetHTML(s, d, num); num++; if (s === S.cur) break; continue; }
-    h += curStreetHTML(s, d, num); break;
+    if (s !== S.cur || S.end){ h += doneHTML(s, d, num); num++; if (s === S.cur) break; continue; }
+    h += s === "pre" ? preHTML(d, num) : postHTML(s, d, num); break;
   }
   if (S.end) h += endHTML();
   $("flow").innerHTML = h;
   if (!S.end) renderResult(S.cur);
   afterRender();
 }
-function doneStreetHTML(s, d, num){
+function doneHTML(s, d, num){
   const cards = s === "pre" ? "" : `<span class="mini">${S.board.slice(s === "flop" ? 0 : NBOARD[s] - 1, NBOARD[s]).filter(c => c != null).map(miniCard).join("")}</span>`;
-  return `<section class="step done" id="st-${s}"><div class="sumrow"><span class="badge">${num}</span><span class="what">${SNAME[s]}</span>${cards}<button type="button" class="link" data-act="goto" data-s="${s}">refazer</button></div>${d.log.length ? `<p class="logline">${d.log.map(x => x.t).join(" → ")}</p>` : ""}</section>`;
+  return `<section class="step done" id="st-${s}"><div class="sumrow"><span class="badge">${num}</span><span class="what">${SNAME[s]}</span>${cards}<button type="button" class="link" data-act="goto" data-s="${s}">voltar aqui</button></div>${d.log.length ? `<p class="logline">${d.log.map(x => x.t).join(" → ")}</p>` : ""}</section>`;
 }
-function curStreetHTML(s, d, num){
-  let h = `<section class="step cur" id="st-${s}"><div class="sh"><span class="badge">${num}</span><h2>${SNAME[s]}</h2><span class="sub">pote ${money(potNow(d))}</span></div>`;
-  if (s !== "pre"){
-    const n = NBOARD[s];
-    h += `<div class="felt-strip"><span class="lbl">Mesa</span>${S.board.slice(0, n).map((c, i) => {
-      const lock = s === "turn" ? i < 3 : s === "river" ? i < 4 : false;
-      return slotHTML(c, i < 3 ? "Flop" : i === 3 ? "Turn" : "River", { k: "board", i, sm: true, lock });
-    }).join("")}</div>`;
-    if (!streetCardsOK(s)){
-      const t = target();
-      h += t ? pickerHTML(t.i < 3 ? `carta ${t.i + 1} do flop` : t.i === 3 ? "carta do turn" : "carta do river") : "";
-      return h + `</section>`;
+function preHTML(d, num){
+  const bb = S.cfg.bb;
+  let h = `<section class="step cur" id="st-pre"><div class="sh"><span class="badge">${num}</span><h2>Antes do flop</h2><span class="sub">pote ${money(potNow(d))}</span></div>`;
+  if (!d.heroActed){
+    h += `<p class="q">Quantos só pagaram o blind (limp) antes de você?</p>${countChips("limpers", 0, nBefore(), d.limpers || 0)}`;
+    h += `<p class="q" id="q-pre">${S.pos === "BB" ? "Alguém aumentou?" : "Alguém aumentou antes de você?"}</p>`;
+    const opts = [2.5, 3, 4, 5, 6].map(x => ({ v: r2(x * bb), big: `${fmtNum(x)} BB`, sub: `para ${money(x * bb)}` }));
+    h += `<div class="fgrid">${fbtn("noraise", "", "Não", "ninguém", "", d.phase !== "ask" && !d.raise ? "on no" : "no")}${opts.map(o => fbtn("raise", "", o.big, o.sub, `data-v="${o.v}"`, d.raise === o.v ? "on" : "")).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="raise-">Outro valor</button></div>${S.ui.custom === "raise-" ? customRow("raise", "") : ""}`;
+    if (d.raise){
+      const before = order().slice(0, order().indexOf(S.pos)), opts2 = before.length ? before : order().filter(p => p !== S.pos);
+      h += `<p class="q sm">Quem aumentou?</p><div class="chips">${opts2.map(p => `<button type="button" class="chip ${S.vrPos === p ? "sel" : ""}" data-act="raiser" data-p="${p}">${p}</button>`).join("")}<button type="button" class="chip ${!S.vrPos ? "sel" : ""}" data-act="raiser" data-p="">Não sei</button></div>`;
+      h += `<p class="q sm">Quantos pagaram esse aumento antes de você?</p>${countChips("callers", 0, maxCallers(), d.callers || 0)}`;
     }
-    h += `<p class="qhelp" style="margin:10px 0 0">Seu jogo agora: <b>${describe(evalCards([...S.hero, ...boardFor(s)], 2 + n))}</b></p>`;
-    if (!S.vills.length) S.vills = [mkV("Vilão", "normal")];
-    h += villsHTML(s);
-    if (fresh(d)) h += `<div class="fl" style="margin-top:12px"><label for="pot-${s}">Pote no começo da rua</label><input class="inp" id="pot-${s}" type="text" inputmode="decimal" autocomplete="off" value="${fmtNum(d.potStart, 2)}"><span class="help">Estimado. Corrija se for diferente.</span></div>`;
+    h += `<p class="potline">Pote: ${preSummary(d)}</p>`;
+  } else {
+    h += logHTML(d);
+    h += `<p class="potline">Pote: ${preSummary(d)}</p>`;
+    if (d.phase === "resp"){
+      h += `<p class="q" id="q-pre">E eles, depois do seu aumento?</p><div class="fgrid">`;
+      for (let i = 1; i <= nOthers(); i++) h += fbtn("pcalled", i, i === 1 ? "1 pagou" : `${i} pagaram`, "");
+      if (left() > 0) h += fbtn("pover", "", "Aumentaram", "por cima ▸", "", d.respAsk === "over" ? "on" : "");
+      h += fbtn("pfold", "", "Largaram", "pote é seu") + `</div>`;
+      if (d.respAsk === "over") h += `<p class="q sm">Aumentaram para quanto?</p>${amtRow("povamt", "", [2.5, 3, 4].map(x => ({ v: r2(d.heroStreet * x), big: money(r2(d.heroStreet * x)), sub: `${fmtNum(x)}x` })).concat(left() > 0 ? [{ v: r2(d.heroStreet + left()), big: "All-in", sub: money(d.heroStreet + left()) }] : []))}`;
+    } else if (d.phase === "callpre"){
+      const pend = d.others.filter(o => !o.folded && o.a < d.villStreet).length;
+      h += `<p class="q" id="q-pre">Depois do seu call, mais alguém pagou?</p><p class="qhelp">Quem ainda tinha que falar: ${d.others.filter(o => !o.folded && o.a < d.villStreet).map(o => o.w).join(", ")}.</p><div class="fgrid">${fbtn("pcallers", 0, "Ninguém", "largaram", "", "no")}`;
+      for (let i = 1; i <= pend; i++) h += fbtn("pcallers", i, i === 1 ? "1 pagou" : `${i} pagaram`, "");
+      h += `</div>`;
+    }
   }
+  h += `<div id="res-pre"></div></section>`;
+  return h;
+}
+function villsLine(){
+  return `<div class="inhand"><div class="inhand-top"><span class="ttl">Na mão: você + ${S.vills.length}</span>
+    <div class="stepper sm"><button type="button" data-act="vcount" data-d="-1" aria-label="Um adversário a menos">−</button><output>${S.vills.length}</output><button type="button" data-act="vcount" data-d="1" aria-label="Um adversário a mais">+</button></div></div>
+    <div class="vlist">${S.vills.map((v, i) => `<button type="button" class="vchip ${S.editV === i ? "sel" : ""}" data-act="editv" data-n="${i}"><b>${v.label}</b><span>${pct(vShare(v))} das mãos</span></button>`).join("")}</div>
+    ${S.editV != null && S.vills[S.editV] ? `<p class="qhelp" style="margin:10px 0 6px">Como o <b>${S.vills[S.editV].label}</b> joga?</p><div class="chips">${[...(S.vills[S.editV].base.startsWith("pos:") || BASES[S.vills[S.editV].base] ? [S.vills[S.editV].base] : []), ...PROFILES].map(k => `<button type="button" class="chip ${S.vills[S.editV].base === k ? "sel" : ""}" data-act="vbase" data-k="${k}">${baseName(k)}</button>`).join("")}</div>` : ""}</div>`;
+}
+function postHTML(s, d, num){
+  let h = `<section class="step cur" id="st-${s}"><div class="sh"><span class="badge">${num}</span><h2>${SNAME[s]}</h2><span class="sub">pote ${money(potNow(d))}</span></div>`;
+  const n = NBOARD[s];
+  h += `<div class="felt-strip">${S.board.slice(0, n).map((c, i) => slotHTML(c, i < 3 ? "Flop" : i === 3 ? "Turn" : "River", { k: "board", i, sm: true, lock: (s === "turn" && i < 3) || (s === "river" && i < 4) })).join("")}</div>`;
+  if (!streetCardsOK(s)){
+    const t = target();
+    if (t) h += pickerHTML(t.i < 3 ? `carta ${t.i + 1} do flop` : t.i === 3 ? "carta do turn" : "carta do river");
+    return h + `</section>`;
+  }
+  if (!S.vills.length) S.vills = [mkV("Vilão", "normal")];
+  h += `<p class="fjogo">Seu jogo: ${describe(evalCards([...S.hero, ...boardFor(s)], 2 + n))}</p>`;
+  h += villsLine();
   h += logHTML(d);
-  if (d.phase === "ask" || d.phase === "askamt"){
-    const q = s === "pre" ? (S.pos === "BB" ? "Alguém aumentou?" : "Alguém aumentou antes de você?") : "Alguém apostou antes de você?";
-    const help = s === "pre" ? "Só pagar o blind não conta como aumento." : "Se você fala primeiro ou todos deram check até você, toque em Não.";
-    h += `<p class="q" id="q-${s}">${q}</p><p class="qhelp">${help}</p>`;
-    if (s === "pre" && d.phase === "ask"){
-      h += `<p class="qhelp" style="margin-top:-4px">Antes, quantos entraram só pagando o blind (limp)?</p>${countChips("limpers", 0, nBefore(), d.limpers || 0)}<div style="height:10px"></div>`;
+  const P = potNow(d), L = left();
+  if (d.phase === "ask"){
+    h += `<p class="q" id="q-${s}">Alguém apostou antes de você?</p><p class="qhelp">Se você fala primeiro ou todos deram check até você: Não.</p>`;
+    h += `<div class="fgrid">${fbtn("nobet", "", "Não", "check", "", "no")}${potFracs(P, L).map(o => fbtn("vbet", "", o.big, o.sub, `data-v="${o.v}"`)).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="vbet-">Outro valor</button></div>${S.ui.custom === "vbet-" ? customRow("vbet", "") : ""}`;
+    if (S.vills.length > 1){
+      h += `<button type="button" class="linkbtn more" data-act="more">${S.ui.more ? "▾" : "▸"} Quem apostou e quantos pagaram (opcional)</button>`;
+      if (S.ui.more) h += `<div class="fmore"><p>Quem apostou?</p>${whoChips("bettor", d.bettor || 0)}<p>Quantos já pagaram antes de você?</p>${countChips("precall", 0, S.vills.length - 1, d.pre || 0)}</div>`;
     }
-    h += `<div class="big2"><button type="button" class="bigbtn" data-act="no">Não</button><button type="button" class="bigbtn ${d.phase === "askamt" ? "sel" : ""}" data-act="yes">${s === "pre" ? "Sim, aumentaram" : "Sim, apostaram"}</button></div>`;
-    if (d.phase === "askamt"){
-      if (s === "pre"){
-        const before = order().slice(0, order().indexOf(S.pos)), opts = before.length ? before : order().filter(p => p !== S.pos);
-        h += `<p class="q" style="font-size:17px">Quem aumentou?</p><div class="chips">${opts.map(p => `<button type="button" class="chip ${S.vrPos === p ? "sel" : ""}" data-act="raiser" data-p="${p}">${p}</button>`).join("")}<button type="button" class="chip ${!S.vrPos ? "sel" : ""}" data-act="raiser" data-p="">Não sei</button></div>
-          <p class="q" style="font-size:17px">Quantos já pagaram esse aumento antes de você?</p>${countChips("callers", 0, maxCallers(), d.callers || 0)}`;
-      } else if (S.vills.length > 1){
-        h += `<p class="q" style="font-size:17px">Quem apostou?</p>${whoChips("bettor", d.bettor || 0)}
-          <p class="q" style="font-size:17px">Quantos já pagaram antes de você?</p>${countChips("precall", 0, S.vills.length - 1, d.pre || 0)}`;
-      }
-      h += `<p class="q" style="font-size:17px">${s === "pre" ? "Aumentaram para quanto?" : "Quanto apostaram?"}</p>${amtHTML("open")}`;
-    }
+    h += `<button type="button" class="linkbtn more" data-act="more2">${S.ui.more2 ? "▾" : "▸"} Corrigir o pote</button>`;
+    if (S.ui.more2) h += `<div class="fl" style="margin-top:6px"><label for="pot-${s}">Pote no começo da rua</label><input class="inp" id="pot-${s}" type="text" inputmode="decimal" autocomplete="off" value="${fmtNum(d.potStart, 2)}"></div>`;
   } else if (d.phase === "resp"){
-    const L = left(), many = S.vills.length > 1 || (s === "pre" && d.level <= 1);
-    h += `<p class="q" id="q-${s}">${d.respMode === "bet" ? "E aí, o que fizeram?" : "E depois do seu check?"}</p>`;
     if (d.respMode === "bet"){
-      h += `<div class="big2 three"><button type="button" class="bigbtn ${d.respAsk === "called" ? "sel" : ""}" data-act="resp" data-t="called">Pagaram</button>${L > 0 ? `<button type="button" class="bigbtn ${d.respAsk === "over" ? "sel" : ""}" data-act="resp" data-t="over">Aumentaram por cima</button>` : ""}<button type="button" class="bigbtn" data-act="resp" data-t="folded">Todos largaram</button></div>`;
-      if (d.respAsk === "called") h += `<p class="q" style="font-size:17px">Quantos pagaram?</p>${countChips("ncalled", 1, s === "pre" ? nOthers() : Math.max(1, S.vills.length), null, i => i === 1 ? "1 jogador" : `${i}`)}`;
+      h += `<p class="q" id="q-${s}">E eles?</p><div class="fgrid">`;
+      for (let i = 1; i <= Math.max(1, S.vills.length); i++) h += fbtn("vcalled", i, i === 1 ? "Pagou" : `${i} pagaram`, "");
+      if (L > 0) h += fbtn("vover", "", "Aumentou", "por cima ▸", "", d.respAsk === "over" ? "on" : "");
+      h += fbtn("vfold", "", "Largaram", "pote é seu") + `</div>`;
       if (d.respAsk === "over"){
-        if (s !== "pre" && S.vills.length > 1) h += `<p class="q" style="font-size:17px">Quem aumentou?</p>${whoChips("overwho", d.overWho || 0)}`;
-        h += `<p class="q" style="font-size:17px">Aumentaram para quanto?</p>${amtHTML("over")}`;
+        if (S.vills.length > 1) h += `<p class="q sm">Quem aumentou?</p>${whoChips("overwho", d.overWho || 0)}`;
+        h += `<p class="q sm">Aumentou para quanto?</p>${amtRow("vovamt", "", [2.5, 3, 4].map(x => ({ v: r2(d.heroStreet * x), big: money(r2(d.heroStreet * x)), sub: `${fmtNum(x)}x` })).concat(L > 0 ? [{ v: r2(d.heroStreet + L), big: "All-in", sub: money(d.heroStreet + L) }] : []))}`;
       }
     } else {
-      h += `<div class="big2"><button type="button" class="bigbtn" data-act="resp" data-t="checked">Todos deram check</button><button type="button" class="bigbtn ${d.respAsk === "bet" ? "sel" : ""}" data-act="resp" data-t="bet">Apostaram</button></div>`;
-      if (d.respAsk === "bet"){
-        if (S.vills.length > 1) h += `<p class="q" style="font-size:17px">Quem apostou?</p>${whoChips("bettor", d.bettor || 0)}`;
-        h += `<p class="q" style="font-size:17px">Quanto apostaram?</p>${amtHTML("open")}`;
-      }
+      h += `<p class="q" id="q-${s}">Depois do seu check:</p><div class="fgrid">${fbtn("vchecked", "", "Todos check", "próxima carta", "", "no")}${potFracs(P, L).map(o => fbtn("vbet2", "", o.big, `apostaram ${o.sub}`, `data-v="${o.v}"`)).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="vbet2-">Outro valor</button></div>${S.ui.custom === "vbet2-" ? customRow("vbet2", "") : ""}`;
     }
-    h += `<button type="button" class="ghost" data-act="goto" data-s="${s}">Desfazer esta rua</button>`;
   }
   h += `<div id="res-${s}"></div></section>`;
   return h;
@@ -1240,17 +1318,14 @@ function endHTML(){
   const title = { fold: "Você largou a mão.", won: "Todos largaram: o pote é seu!", showdown: "Mão terminada.", allin: "Você está all-in. Não há mais decisões." }[e.kind];
   if (!e.done){
     return `<section class="step cur endcard" id="endcard"><p class="q" style="margin-top:0">${title}</p><p class="qhelp">Como terminou? Pote: <b>${money(e.pot)}</b>. Você colocou <b>${money(e.inv)}</b>.</p>
-      <div class="result-btns"><button type="button" class="bigbtn r-raise" data-act="result" data-r="won">Ganhei</button><button type="button" class="bigbtn r-fold" data-act="result" data-r="lost">Perdi</button><button type="button" class="bigbtn r-check" data-act="result" data-r="split">Dividi</button></div>
-      <button type="button" class="ghost" data-act="goto" data-s="${S.cur}">Desfazer</button></section>`;
+      <div class="result-btns"><button type="button" class="bigbtn r-raise" data-act="result" data-r="won">Ganhei</button><button type="button" class="bigbtn r-fold" data-act="result" data-r="lost">Perdi</button><button type="button" class="bigbtn r-check" data-act="result" data-r="split">Dividi</button></div></section>`;
   }
   const diff = r2(S.cfg.stack - S.cfg.buyin);
   return `<section class="step cur endcard" id="endcard"><p class="q" style="margin-top:0">${title}</p>
     <div class="net ${e.net >= 0 ? "pos" : "neg"}">${e.net >= 0 ? "+" : "−"}${money(Math.abs(e.net))}</div>
     <p class="qhelp">Seu stack: <b>${money(S.handStack)}</b> → <b>${money(S.cfg.stack)}</b>${S.cfg.bb > 0 ? ` (${bbs(S.cfg.stack)})` : ""}. Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>.</p>
-    ${S.vills.length <= 1 ? `<p class="qhelp">Stack do vilão ajustado para ${money(S.cfg.vstack)}. Se outro jogador entrar, ajuste na engrenagem.</p>` : ""}
     ${S.cfg.stack <= 0 ? `<p class="qhelp"><b>Seu stack zerou.</b> Se fez recompra, abra a engrenagem lá em cima e atualize "Seu stack" e "Buy-in total".</p>` : ""}
-    <button type="button" class="primary" data-act="new">Nova mão</button>
-    <button type="button" class="ghost" data-act="undores">Desfazer resultado</button></section>`;
+    <button type="button" class="primary big" data-act="new">Nova mão →</button></section>`;
 }
 function chartGrid(fn, mine){
   let g = ""; const cnt = {};
@@ -1268,366 +1343,8 @@ function codeWeights(v){
   for (let i = 0; i < ALL_COMBOS.length; i++){ const [a, b] = ALL_COMBOS[i]; if (dead.has(a) || dead.has(b)) continue; const c = COMBO_CODE[i]; sum[c] = (sum[c] || 0) + v.w[i]; n[c] = (n[c] || 0) + 1; }
   return c => n[c] ? sum[c] / n[c] : 0;
 }
-function villChart(v, mine){
-  const cw = codeWeights(v);
-  return chartGrid(c => { const w = cw(c); return w > 0.02 ? { cls: "vw", w } : "out"; }, mine).html;
-}
+function villChart(v, mine){ const cw = codeWeights(v); return chartGrid(c => { const w = cw(c); return w > 0.02 ? { cls: "vw", w } : "out"; }, mine).html; }
 function renderResult(s){
-  const el = $("res-" + s); if (!el) return;
-  const d = S.st[s]; if (!d || S.end) { el.innerHTML = ""; return; }
-  const v = getVerdict(s);
-  if (!v){ el.innerHTML = ""; return; }
-  if (v === "calc"){ el.innerHTML = `<div class="result" id="result-${s}"><div class="calc">Calculando…</div></div>`; return; }
-  let body = `<p class="reason">${v.reason}</p>`;
-  if (s !== "pre"){
-    const pos = Math.min(Math.max(v.req * 100, 0), 100), edge = pos < 14 ? "el" : pos > 86 ? "er" : "";
-    body += `<div class="meter"><div class="fill" style="width:${(v.eq * 100).toFixed(1)}%"></div><div class="need ${edge}" style="left:${pos.toFixed(1)}%"><span>${v.hasBet ? "precisa" : "sua parte"} ${pct(v.req)}</span></div></div>
-      <div class="legend"><span>Você ganha <b>${pct(v.eq)}</b></span><span>${v.hasBet ? "Precisa para pagar" : "Sua parte do pote"} <b>${pct(v.req)}</b></span></div>`;
-  }
-  const TAKEN = { Raise: "raise", Aposte: "bet", Call: "call", Check: "check", Fold: "fold" };
-  const tc = toCall(d);
-  let next = v.action === "Fold"
-    ? `<button type="button" class="primary" data-act="follow" data-t="fold">Larguei</button>`
-    : `<button type="button" class="primary" data-act="follow" data-t="${TAKEN[v.action]}" ${v.to ? `data-to="${v.to}"` : ""}>Fiz isso</button>`;
-  next += `<button type="button" class="ghost" data-act="other">Fiz outra coisa</button>`;
-  if (S.showOther === s){
-    const canRaise = left() > 0;
-    const opts = tc > 0
-      ? [["fold","Larguei"],["call", s === "pre" && d.level === 0 ? "Só paguei o blind" : "Paguei"], ...(canRaise ? [["raise", "Aumentei"]] : [])]
-      : [["check","Dei check"], ...(canRaise ? [["bet", s === "pre" ? "Aumentei" : "Apostei"]] : [])];
-    next += `<div class="others">${opts.map(([t, l]) => `<button type="button" data-act="${t === "raise" || t === "bet" ? "heroask" : "follow"}" data-t="${t}">${l}</button>`).join("")}</div>`;
-    if (d.heroAmt) next += `<p class="q" style="font-size:17px">${tc > 0 || s === "pre" ? "Aumentou para quanto?" : "Apostou quanto?"}</p>${amtHTML("hero")}`;
-  }
-  const below = s === "pre" ? preBelow(v, d) : postBelow(s, v, d);
-  el.innerHTML = `<div class="result" id="result-${s}"><div class="res-top r-${TONE[v.action]}"><div class="res-act">${v.action}</div>${sizeText(v) ? `<div class="res-size">${sizeText(v)}</div>` : ""}</div><div class="res-body">${body}</div></div><div class="next">${next}${d.log.length > 1 ? `<button type="button" class="ghost" data-act="goto" data-s="${s}">Desfazer esta rua</button>` : ""}</div><div class="below">${below}</div>`;
-}
-function preBelow(v, d){
-  const code = handCode(S.hero[0], S.hero[1]), mode = v.mode, p = S.pos, n = S.cfg.players;
-  const mine = chartGrid(c => chartAction(c, mode, p), code);
-  const labels = mode === "vsraise" ? { raise: "Raise (3-bet)", call: "Call", fold: "Fold" } : mode === "vs3bet" ? { raise: "Raise (4-bet)", call: "Call", fold: "Fold" } : mode === "vs4bet" ? { raise: "All-in", fold: "Fold" } : mode === "limp" ? { raise: "Raise", check: "Check" } : { raise: "Raise", fold: "Fold" };
-  const title = { open: `Sua tabela: ${p}, ninguém aumentou`, limp: "Sua tabela: big blind, ninguém aumentou", vsraise: `Sua tabela: ${p} contra um aumento`, vs3bet: "Sua tabela: aumentaram por cima de você (3-bet)", vs4bet: "Sua tabela: 4-bet ou mais" }[mode];
-  let h = `<div class="panel2"><h3>${title}</h3><p class="lead">Mesa de ${n}. Sua mão (${code}) está com contorno.</p>${mine.html}
-    <div class="rlegend">${Object.entries(labels).map(([k, t]) => `<span class="${k}">${t} · ${pct((mine.cnt[k] || 0) / 1326)}</span>`).join("")}</div></div>`;
-  if (S.vills.length){
-    const e = eqFor(S.hero, [], S.vills);
-    h += `<div class="panel2"><h3>Quem está na mão</h3><p class="lead">${S.vills.map(v => `<b>${v.label}</b> (${baseName(v.base).toLowerCase()}, ${pct(vShare(v))} das mãos)`).join(" · ")}.${e ? ` Contra eles, ${code} ganha <b>${pct(e.eq)}</b> das vezes.` : ""}</p>
-      <p class="lead" style="margin-top:8px">Range de <b>${S.vills[0].label}</b>:</p>${villChart(S.vills[0], code)}
-      <div class="rlegend"><span class="vil">Mãos que ele pode ter</span><span class="out">Fora do range</span></div></div>`;
-  } else {
-    const e = eqFor(S.hero, [], null);
-    if (e) h += `<p class="foot">Contra uma mão qualquer, ${code} ganha ${pct(e.eq, 1)} das vezes.</p>`;
-  }
-  return h;
-}
-function postBelow(s, v, d){
-  const e = v.e, board = boardFor(s), code = handCode(S.hero[0], S.hero[1]), main = S.vills[0];
-  const vn = villainNow(board, main);
-  let facts = "";
-  if (board.length < 5){
-    const o = computeOuts(S.hero, board);
-    facts += `<li><span class="ic">${o.n}</span><div><b>${o.n} outs</b>: cartas que melhoram sua mão. Chance de vir ${board.length === 3 ? "até o river" : "no river"}: <b>${pct(o.prob)}</b> (conta de cabeça: ${o.n} × ${board.length === 3 ? 4 : 2} ≈ ${o.rule}%).${o.n ? `<div class="mini" style="flex-wrap:wrap;margin-top:6px">${o.list.map(x => miniCard(x.c)).join("")}</div>` : ""}</div></li>`;
-  }
-  facts += S.vills.map(x => { const n2 = villainNow(board, x); return `<li><span class="ic v">${x.label.slice(0, 2)}</span><div><b>${x.label}</b> (${pct(vShare(x))} das mãos${x.hist.length ? `, já ${x.hist.map(h => ACT_NAME[h.t]).join(" e ")}` : ""}): <b>${pct(n2.ahead)}</b> das mãos dele já te ganham agora.</div></li>`; }).join("");
-  let bars = "";
-  for (let k = 8; k >= 0; k--){ const p = vn.cat[k]; if (p < 0.005) continue; bars += `<div class="bar vb ${k > vn.heroCat ? "ahead" : ""}"><span>${CAT_V[k]}</span><div class="t"><span style="width:${(p * 100).toFixed(1)}%"></span></div><em>${pct(p)}</em></div>`; }
-  const tc = toCall(d), hasBet = tc > 0, c = hasBet ? callInfo(d).add : 0, P = potNow(d);
-  const ev = hasBet ? e.eq * (P + c) - c : 0;
-  const L = left(), spr = L > 0 && P > 0 ? L / P : 0;
-  let dist = "";
-  if (board.length < 5) for (let k = 8; k >= 0; k--){ const p = e.cat[k]; if (p < 0.0005) continue; dist += `<div class="bar"><span>${CAT[k]}</span><div class="t"><span style="width:${(p * 100).toFixed(1)}%"></span></div><em>${pct(p, 1)}</em></div>`; }
-  return `<ul class="facts">${facts}</ul>
-    <div class="panel2"><h3>O que ${main.label} pode ter agora</h3><p class="lead">O range muda sozinho com o que ele fez: quem paga ou aposta costuma ter acertado algo. Em negrito, o que ganha do seu jogo (${CAT[vn.heroCat].toLowerCase()}).</p><div class="dist">${bars}</div>
-      <details class="more"><summary>Ver a tabela do range dele</summary>${villChart(main, code)}<div class="rlegend"><span class="vil">Mais forte = mais provável</span><span class="out">Fora do range</span></div></details></div>
-    <div class="panel2"><h3>Mais números</h3>
-      <dl class="kv">
-        <div><dt>Você ganha / empata</dt><dd>${pct(e.win, 1)} / ${pct(e.tie, 1)}<small>contra ${S.vills.length} ${S.vills.length > 1 ? "jogadores" : "jogador"}</small></dd></div>
-        <div><dt>EV do call</dt><dd class="${hasBet ? (ev >= 0 ? "pos" : "neg") : ""}">${hasBet ? (ev >= 0 ? "+" : "") + money(ev) : "—"}<small>${hasBet ? "ganho médio por call" : "sem aposta para pagar"}</small></dd></div>
-        <div><dt>Odds do pote</dt><dd>${hasBet ? `${fmtNum(P / c, 1)} : 1` : "—"}<small>${hasBet ? `ganha ${money(P)} pagando ${money(c)}` : ""}</small></dd></div>
-        <div><dt>SPR</dt><dd>${spr ? fmtNum(spr, 1) : "—"}<small>${spr ? (spr <= 3 ? "baixo: top pair já pode ir all-in" : spr <= 8 ? "médio: dois pares ou mais para all-in" : "alto: só mão muito forte vai all-in") : "stack que sobra ÷ pote"}</small></dd></div>
-      </dl>
-      ${dist ? `<div class="dist"><h3>Como sua mão termina no river</h3>${dist}</div>` : ""}
-      <p class="foot">${e.n.toLocaleString("pt-BR")} simulações contra o range de cada jogador na mão.</p></div>`;
-}
-function cfgHTML(){
-  return `<div class="cfg">
-    <div class="fl"><label>Blinds</label><div class="pair"><input class="inp" id="c-sb" inputmode="decimal" value="${fmtNum(S.cfg.sb, 2)}" aria-label="Small blind"><span>/</span><input class="inp" id="c-bb" inputmode="decimal" value="${fmtNum(S.cfg.bb, 2)}" aria-label="Big blind"></div><span class="help">Small / big. Ex.: 1/2</span></div>
-    <div class="fl"><label for="c-buyin">Buy-in total</label><input class="inp" id="c-buyin" inputmode="decimal" value="${fmtNum(S.cfg.buyin, 2)}"><span class="help">Quanto comprou na sessão, com recompras.</span></div>
-    <div class="fl"><label for="c-stack">Seu stack agora</label><input class="inp" id="c-stack" inputmode="decimal" value="${fmtNum(S.cfg.stack, 2)}"><span class="help">Atualiza sozinho quando você marca Ganhei/Perdi.</span></div>
-    <div class="fl"><label for="c-vstack">Stack do vilão</label><input class="inp" id="c-vstack" inputmode="decimal" value="${fmtNum(S.cfg.vstack, 2)}"><span class="help">Do adversário principal.</span></div>
-    <div class="note full" id="cfgNote">${cfgNote()}</div>
-    <button type="button" class="primary full" data-act="cfg" style="margin-top:0">Fechar</button>
-  </div>`;
-}
-function cfgNote(){
-  const diff = S.cfg.stack - S.cfg.buyin;
-  return `Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>. Seu stack: <b>${bbs(S.cfg.stack)}</b>. Stack efetivo (o menor dos dois, o máximo em jogo na mão): <b>${money(eff())}</b> (${bbs(eff())}).`;
-}
-function afterRender(){
-  if (S.scrollTo){
-    const id = S.scrollTo; S.scrollTo = null;
-    requestAnimationFrame(() => { const el = $(id) || $("result-" + S.cur); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); });
-  }
-}
-
-/* ---------- Eventos ---------- */
-const readNum = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isFinite(n) && n > 0 ? n : 0; };
-function amtValue(b, act){
-  if (b.dataset.custom){ const inp = $("amt-" + act); return inp ? readNum(inp.value) : 0; }
-  return +b.dataset.v;
-}
-document.addEventListener("click", e => {
-  const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
-  const act = b.dataset.act, s = S.cur, d = heroOK() ? (s === "pre" ? pre() : S.st[s]) : null;
-  switch (act){
-    case "cfg": S.showCfg = !S.showCfg; break;
-    case "players": {
-      S.cfg.players = +b.dataset.n;
-      if (S.pos && !order().includes(S.pos)) S.pos = null;
-      if (S.sugPos && !order().includes(S.sugPos)) S.sugPos = null;
-      if (S.vrPos && !order().includes(S.vrPos)) S.vrPos = null;
-      save(); break;
-    }
-    case "pos": S.pos = b.dataset.p; S.sugPos = null; S.editPos = false; save(); if (S.st.pre && fresh(S.st.pre)) initPre(S.st.pre); S.scrollTo = heroOK() ? "st-" + S.cur : "st-hand"; break;
-    case "editpos": S.editPos = true; break;
-    case "edithand": S.editHand = true; S.scrollTo = "st-hand"; break;
-    case "handok": S.editHand = false; S.scrollTo = "st-" + S.cur; break;
-    case "card": placeCard(+b.dataset.c); break;
-    case "slot": { const i = +b.dataset.i; if (b.dataset.k === "hero"){ S.hero[i] = null; S.editHand = true; } else S.board[i] = null; break; }
-    case "limpers": if (d) d.limpers = +b.dataset.n; break;
-    case "callers": if (d) d.callers = +b.dataset.n; break;
-    case "bettor": if (d) d.bettor = +b.dataset.n; break;
-    case "precall": if (d) d.pre = +b.dataset.n; break;
-    case "overwho": if (d) d.overWho = +b.dataset.n; break;
-    case "no": if (!d) return; answerNo(); break;
-    case "yes": if (!d) return; d.phase = "askamt"; d.log = []; break;
-    case "raiser": S.vrPos = b.dataset.p || null; break;
-    case "openamt": {
-      if (!d) return; const v = amtValue(b, act); if (!(v > 0)) return;
-      if (s === "pre") answerPreRaise(v);
-      else if (d.phase === "resp") villBet(v, d.bettor, 0);
-      else villBet(v, d.bettor, d.pre);
-      break;
-    }
-    case "overamt": { if (!d) return; const v = amtValue(b, act); if (!(v > d.heroStreet)) return; respOver(v, d.overWho || 0); break; }
-    case "heroamt": { if (!d) return; const v = amtValue(b, act); if (!(v > 0)) return; heroAct("raise", v); break; }
-    case "ncalled": if (!d) return; respCalled(+b.dataset.n); break;
-    case "vcount": {
-      const dd = +b.dataset.d;
-      if (dd > 0 && S.vills.length < nOthers()) S.vills.push(mkV(`Jogador ${S.vills.length + 1}`, "normal"));
-      if (dd < 0 && S.vills.length > (s === "pre" ? 0 : 1)) S.vills.pop();
-      if (S.editV != null && S.editV >= S.vills.length) S.editV = null;
-      RV++; break;
-    }
-    case "editv": { const i = +b.dataset.n; S.editV = S.editV === i ? null : i; break; }
-    case "vbase": { const v = S.vills[S.editV]; if (v){ v.base = b.dataset.k; recalc(v); } break; }
-    case "other": S.showOther = S.showOther === s ? null : s; if (d) d.heroAmt = false; break;
-    case "heroask": if (d){ d.heroAmt = true; } break;
-    case "follow": if (!d) return; heroAct(b.dataset.t, b.dataset.to ? +b.dataset.to : 0); break;
-    case "resp": {
-      if (!d) return; const t = b.dataset.t;
-      if (t === "over" || t === "bet"){ d.respAsk = t; break; }
-      if (t === "called"){
-        const many = s === "pre" ? d.level <= 1 : S.vills.length > 1;
-        if (many){ d.respAsk = "called"; break; }
-        respCalled(1); break;
-      }
-      d.respAsk = null;
-      if (t === "folded"){ d.log.push({ w: "vil", t: "Todos largaram" }); endHand("won"); }
-      if (t === "checked") respChecked();
-      break;
-    }
-    case "result": { const r = b.dataset.r; applyResult(r === "won" ? S.end.pot : r === "split" ? S.end.pot / 2 : 0); break; }
-    case "goto": resetStreet(b.dataset.s); break;
-    case "undores": if (S.end && (S.end.kind === "showdown" || S.end.kind === "allin")){ S.cfg.stack = S.handStack; S.cfg.vstack = S.vstackStart; save(); S.end.done = false; } else resetStreet(S.cur); break;
-    case "new": newHand(); break;
-    default: return;
-  }
-  render();
-});
-document.addEventListener("input", e => {
-  const id = e.target.id || "";
-  if (id.startsWith("c-")){
-    const k = id.slice(2); S.cfg[k] = readNum(e.target.value); save();
-    const p0 = S.st.pre;
-    if (!p0 || fresh(p0)){ S.handStack = S.cfg.stack; S.vstackStart = S.cfg.vstack; if (p0 && p0.villStreet === 0) initPre(p0); }
-    $("cfgBtn").innerHTML = cfgBtnHTML();
-    const n = $("cfgNote"); if (n) n.innerHTML = cfgNote();
-    if (heroOK() && !S.end) renderResult(S.cur);
-    return;
-  }
-  if (id.startsWith("pot-")){
-    const d = S.st[id.slice(4)];
-    if (d){ d.potStart = readNum(e.target.value); const sub = document.querySelector(`#st-${id.slice(4)} .sh .sub`); if (sub) sub.textContent = `pote ${money(potNow(d))}`; renderResult(S.cur); }
-  }
-});
-
-
-// Limites pelo tamanho da mesa: quantos falam antes de você, quantos podem pagar
-function nOthers(){ return Math.max(1, S.cfg.players - 1); }
-function nBefore(){ const i = order().indexOf(S.pos); return Math.max(0, i < 0 ? nOthers() : i); }
-function maxCallers(){ const i = S.vrPos ? order().indexOf(S.vrPos) : -1; return Math.max(0, i >= 0 ? nBefore() - i - 1 : nBefore() - 1); }
-/* ================= MODO RÁPIDO ================= */
-try { const m = localStorage.getItem("outsodds-mode"); S.mode = m === "full" ? "full" : "fast"; } catch (e) { S.mode = "fast"; }
-S.fwhy = false; S.fmore = false; S.fcustom = null; S.autoPos = false;
-const UNDO = [];
-function snapState(){
-  return JSON.stringify({ pos: S.pos, sugPos: S.sugPos, editPos: S.editPos, editHand: S.editHand, hero: S.hero, board: S.board, st: S.st, cur: S.cur, end: S.end, vrPos: S.vrPos,
-    vills: S.vills.map(v => ({ label: v.label, base: v.base, hist: v.hist })), snap: S.snap, handStack: S.handStack, vstackStart: S.vstackStart, stack: S.cfg.stack, vstack: S.cfg.vstack, autoPos: S.autoPos });
-}
-function restoreState(js){
-  const o = JSON.parse(js);
-  ["pos","sugPos","editPos","editHand","hero","board","st","cur","end","vrPos","snap","handStack","vstackStart","autoPos"].forEach(k => S[k] = o[k]);
-  S.cfg.stack = o.stack; S.cfg.vstack = o.vstack;
-  S.vills = o.vills.map(x => { const v = { label: x.label, base: x.base, hist: x.hist, w: null }; recalc(v); return v; });
-  S.showOther = null; S.fcustom = null; S.editV = null;
-  save();
-}
-const NO_UNDO = new Set(["undo","cfg","other","heroask","editv","mode","fwhy","fmore","fcustom","players"]);
-document.addEventListener("click", e => {
-  const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
-  if (NO_UNDO.has(b.dataset.act)) return;
-  UNDO.push(snapState()); if (UNDO.length > 60) UNDO.shift();
-}, true);
-
-function defaultTo(s, d){
-  const bb = S.cfg.bb, tc = toCall(d), P = potNow(d);
-  if (s === "pre"){
-    if (d.level === 0) return ((S.pos === "BB" ? 4 : 3) + (d.limpers || 0)) * bb;
-    if (d.level === 1) return 3 * d.villStreet;
-    if (d.level === 2) return 2.3 * d.villStreet;
-    return d.heroStreet + left();
-  }
-  return tc > 0 ? 3 * d.villStreet : r2(d.villStreet + P * 0.66);
-}
-function fbtn(act, k, label, sub, extra = ""){
-  return `<button type="button" class="fbtn" data-act="${act}" data-k="${k}" ${extra}>${label}${sub ? `<small>${sub}</small>` : ""}</button>`;
-}
-function fastBar(){
-  const d = S.st[S.cur];
-  const hero = heroOK() ? `<span class="mini">${miniCard(S.hero[0])}${miniCard(S.hero[1])}</span>` : `<span class="fb-empty">cartas</span>`;
-  const brd = S.board.filter(c => c != null);
-  let h = `<div class="fbar"><div class="fbar-row">
-    <button type="button" class="fb-pos" data-act="editpos" aria-label="Trocar posição">${S.pos || "—"}</button>
-    <button type="button" class="fb-cards" data-act="edithand" aria-label="Trocar cartas">${hero}</button>
-    ${brd.length ? `<span class="mini fb-board">${brd.map(miniCard).join("")}</span>` : ""}
-    <span class="fb-pot">${d && heroOK() ? `pote<b>${money(potNow(d))}</b>` : ""}</span>
-    <button type="button" class="fb-undo" data-act="undo" ${UNDO.length ? "" : "disabled"} aria-label="Voltar o último toque">↶</button>
-  </div>`;
-  if (heroOK() && S.pos && !S.end && S.cur !== "pre" && streetCardsOK(S.cur)){
-    h += `<div class="fbar-row sub"><span>Na mão: <b>você + ${S.vills.length}</b></span>
-      <div class="stepper sm"><button type="button" data-act="vcount" data-d="-1" aria-label="Um a menos">−</button><output>${S.vills.length}</output><button type="button" data-act="vcount" data-d="1" aria-label="Um a mais">+</button></div>
-      <button type="button" class="fb-new" data-act="fnew">Nova mão</button></div>`;
-  }
-  return h + `</div>`;
-}
-function fastPos(){
-  const o = order(), sel = S.pos || S.sugPos;
-  return `<section class="fast cur" id="st-pos"><h2 class="fh">Sua posição</h2>
-    <p class="fq">Mesa de ${S.cfg.players} · <button type="button" class="linkbtn" data-act="cfg">mudar mesa</button></p>
-    <div class="fgrid pos">${o.map(p => `<button type="button" class="fbtn ${sel === p ? "sug" : ""}" data-act="pos" data-p="${p}">${p}<small>${S.cfg.players === 2 && p === "BTN" ? "Botão/SB" : POS_SHORT[p]}</small></button>`).join("")}</div>
-  </section>`;
-}
-function fastAsk(s, d){
-  const bb = S.cfg.bb, P = potNow(d);
-  let h = `<p class="fq" id="q-${s}">${s === "pre" ? (S.pos === "BB" ? "Alguém aumentou?" : "Antes de você, alguém aumentou?") : "Antes de você, alguém apostou?"}</p><div class="fgrid">`;
-  if (s === "pre"){
-    h += fbtn("fa", "no", "Ninguém", "só blinds", `data-wide="1"`);
-    [2.5, 3, 4, 5, 6].forEach(x => h += fbtn("fa", "pre", `${fmtNum(x)} BB`, `aumentou p/ ${money(x * bb)}`, `data-v="${r2(x * bb)}"`));
-  } else {
-    h += fbtn("fa", "no", "Ninguém", "check", `data-wide="1"`);
-    [[1/3,"⅓ pote"],[0.5,"½ pote"],[0.66,"⅔ pote"],[1,"pote"]].forEach(([f, l]) => h += fbtn("fa", "post", money(r2(P * f)), l, `data-v="${r2(P * f)}"`));
-    h += fbtn("fa", "post", "All-in", money(left()), `data-v="${left()}"`);
-  }
-  h += `<button type="button" class="fbtn ghosty" data-act="fcustom" data-k="${s === "pre" ? "pre" : "post"}">Outro valor</button></div>`;
-  if (S.fcustom === "pre" || S.fcustom === "post") h += fCustom("fa", S.fcustom);
-  h += `<button type="button" class="linkbtn more" data-act="fmore">${S.fmore ? "▾" : "▸"} Mais detalhes (opcional)</button>`;
-  if (S.fmore){
-    if (s === "pre"){
-      const before = order().slice(0, order().indexOf(S.pos)), opts = before.length ? before : order().filter(p => p !== S.pos);
-      h += `<div class="fmore"><p>Quantos só pagaram o blind antes?</p>${countChips("limpers", 0, nBefore(), d.limpers || 0)}
-        <p>Quem aumentou?</p><div class="chips">${opts.map(p => `<button type="button" class="chip ${S.vrPos === p ? "sel" : ""}" data-act="raiser" data-p="${p}">${p}</button>`).join("")}<button type="button" class="chip ${!S.vrPos ? "sel" : ""}" data-act="raiser" data-p="">Não sei</button></div>
-        <p>Quantos já pagaram o aumento?</p>${countChips("callers", 0, maxCallers(), d.callers || 0)}</div>`;
-    } else if (S.vills.length > 1){
-      h += `<div class="fmore"><p>Quem apostou?</p>${whoChips("bettor", d.bettor || 0)}<p>Quantos já pagaram antes de você?</p>${countChips("precall", 0, S.vills.length - 1, d.pre || 0)}</div>`;
-    } else h += `<div class="fmore"><p>Só um adversário na mão. Use o + lá em cima se tiver mais.</p></div>`;
-  }
-  return h;
-}
-function fCustom(act, k){
-  return `<div class="custom"><input class="inp" id="famt" type="text" inputmode="decimal" autocomplete="off" placeholder="valor"><button type="button" class="fbtn ok" data-act="${act}" data-k="${k}" data-custom="1">OK</button></div>`;
-}
-function fastResp(s, d){
-  let h = "";
-  if (d.respMode === "bet"){
-    const max = s === "pre" ? nOthers() : Math.max(1, S.vills.length);
-    h += `<p class="fq" id="q-${s}">E eles?</p><div class="fgrid">`;
-    for (let i = 1; i <= max; i++) h += fbtn("fr", "c" + i, i === 1 ? "Pagou" : `${i} pagaram`, i === 1 ? "1 jogador" : "");
-    if (left() > 0) h += fbtn("fr", "over", "Aumentou", "por cima ▸", d.respAsk === "over" ? `data-on="1"` : "");
-    h += fbtn("fr", "fold", "Largaram", "pote é seu");
-    h += `</div>`;
-    if (d.respAsk === "over"){
-      if (s !== "pre" && S.vills.length > 1) h += `<p class="fq sm">Quem aumentou?</p>${whoChips("overwho", d.overWho || 0)}`;
-      h += `<p class="fq sm">Aumentou para quanto?</p>${amtHTML("over")}`;
-    }
-  } else {
-    const P = potNow(d);
-    h += `<p class="fq" id="q-${s}">Depois do seu check:</p><div class="fgrid">`;
-    h += fbtn("fr", "check", "Todos check", "próxima carta", `data-wide="1"`);
-    [[1/3,"⅓ pote"],[0.5,"½ pote"],[0.66,"⅔ pote"],[1,"pote"]].forEach(([f, l]) => h += fbtn("fr", "bet", money(r2(P * f)), `apostaram ${l}`, `data-v="${r2(P * f)}"`));
-    h += `<button type="button" class="fbtn ghosty" data-act="fcustom" data-k="rbet">Outro valor</button></div>`;
-    if (S.fcustom === "rbet") h += fCustom("fr", "bet");
-  }
-  return h;
-}
-function fastStreet(s, d){
-  let h = `<section class="fast cur" id="st-${s}"><div class="fhead"><h2 class="fh">${SNAME[s]}</h2>`;
-  if (s !== "pre" && streetCardsOK(s)) h += `<span class="fjogo">${describe(evalCards([...S.hero, ...boardFor(s)], 2 + NBOARD[s]))}</span>`;
-  h += `</div>`;
-  if (s !== "pre" && !streetCardsOK(s)){
-    const n = NBOARD[s], t = target();
-    h += `<div class="felt-strip">${S.board.slice(0, n).map((c, i) => slotHTML(c, i < 3 ? "Flop" : i === 3 ? "Turn" : "River", { k: "board", i, sm: true, lock: (s === "turn" && i < 3) || (s === "river" && i < 4) })).join("")}</div>`;
-    if (t) h += pickerHTML(t.i < 3 ? `carta ${t.i + 1} do flop` : t.i === 3 ? "carta do turn" : "carta do river");
-    return h + `</section>`;
-  }
-  if (s !== "pre" && !S.vills.length) S.vills = [mkV("Vilão", "normal")];
-  if (d.phase === "ask" || d.phase === "askamt") h += fastAsk(s, d);
-  else if (d.phase === "resp") h += fastResp(s, d);
-  h += `<div id="res-${s}"></div></section>`;
-  return h;
-}
-function fastEnd(){
-  const e = S.end;
-  const title = { fold: "Você largou.", won: "Todos largaram: pote seu!", showdown: "Fim da mão", allin: "All-in: veja as cartas" }[e.kind];
-  if (!e.done) return `<section class="fast cur" id="endcard"><h2 class="fh">${title}</h2><p class="fq">Como terminou? Pote <b>${money(e.pot)}</b></p>
-    <div class="result-btns"><button type="button" class="bigbtn r-raise" data-act="result" data-r="won">Ganhei</button><button type="button" class="bigbtn r-fold" data-act="result" data-r="lost">Perdi</button><button type="button" class="bigbtn r-check" data-act="result" data-r="split">Dividi</button></div></section>`;
-  const diff = r2(S.cfg.stack - S.cfg.buyin);
-  return `<section class="fast cur endcard" id="endcard"><h2 class="fh">${title}</h2>
-    <div class="net ${e.net >= 0 ? "pos" : "neg"}">${e.net >= 0 ? "+" : "−"}${money(Math.abs(e.net))}</div>
-    <p class="fq">Stack <b>${money(S.cfg.stack)}</b> · sessão <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b></p>
-    ${S.cfg.stack <= 0 ? `<p class="qhelp">Stack zerou. Fez recompra? Atualize na engrenagem.</p>` : ""}
-    <button type="button" class="primary big" data-act="fnew">Nova mão →</button></section>`;
-}
-function renderFast(){
-  let h = fastBar();
-  if (!S.pos || S.editPos){ h += fastPos(); $("flow").innerHTML = h; afterRender(); return; }
-  if (S.autoPos && !heroOK()) h += `<p class="fnote">O botão andou: agora você está no <b>${S.pos}</b>. Se mudou de lugar, toque em ${S.pos} lá em cima.</p>`;
-  if (!heroOK() || S.editHand){
-    const t = target();
-    h += `<section class="fast cur" id="st-hand"><h2 class="fh">Suas 2 cartas</h2><div class="felt-strip">${slotHTML(S.hero[0], "Carta 1", { k: "hero", i: 0 })}${slotHTML(S.hero[1], "Carta 2", { k: "hero", i: 1 })}</div>${t ? pickerHTML(t.i === 0 ? "carta 1" : "carta 2") : `<button type="button" class="primary" data-act="handok">Pronto</button>`}</section>`;
-    $("flow").innerHTML = h; afterRender(); return;
-  }
-  pre();
-  const hist = STREETS.filter(s => S.st[s] && (s !== S.cur || S.end) && S.st[s].log.length)
-    .map(s => `<li><b>${SNAME[s]}</b>${s !== "pre" ? ` <span class="mini">${S.board.slice(s === "flop" ? 0 : NBOARD[s] - 1, NBOARD[s]).filter(c => c != null).map(miniCard).join("")}</span>` : ""} ${S.st[s].log.map(x => x.t).join(" → ")}</li>`).join("");
-  if (hist) h += `<ol class="fhist">${hist}</ol>`;
-  const d = S.st[S.cur];
-  if (!S.end && d.log.length && d.phase !== "done") h += `<p class="fcurlog">${d.log.map(x => x.t).join(" → ")}</p>`;
-  h += S.end ? fastEnd() : fastStreet(S.cur, d);
-  $("flow").innerHTML = h;
-  if (!S.end) renderFastRes(S.cur);
-  afterRender();
-}
-function renderFastRes(s){
   const el = $("res-" + s); if (!el) return;
   const d = S.st[s]; if (!d || S.end){ el.innerHTML = ""; return; }
   const v = getVerdict(s);
@@ -1638,95 +1355,179 @@ function renderFastRes(s){
     ? `${code} · ${{ open: "ninguém aumentou", limp: "big blind, sem aumento", vsraise: "contra um aumento", vs3bet: "aumentaram por cima", vs4bet: "4-bet ou mais" }[v.mode]}`
     : `Você ganha ${pct(v.eq)} · ${v.hasBet ? "precisa " + pct(v.req) : "sua parte " + pct(v.req)}`;
   const sug = { Raise: "raise", Aposte: "raise", Call: "call", Check: "check", Fold: "fold" }[v.action];
-  const raiseTo = sized(d, v.to && (v.action === "Raise" || v.action === "Aposte") ? v.to : defaultTo(s, d));
-  const ci = callInfo(d);
+  const rt = sized(d, v.to && (v.action === "Raise" || v.action === "Aposte") ? v.to : defaultTo(s, d)), ci = callInfo(d);
   const opts = [];
   if (tc > 0){
     opts.push(["fold", "Fold", "larguei"]);
     opts.push(["call", s === "pre" && d.level === 0 ? "Limp" : "Call", ci.allin ? `all-in ${money(ci.add)}` : money(ci.add)]);
-    if (left() > ci.add) opts.push(["raise", raiseTo.allin ? "All-in" : "Raise", `para ${money(raiseTo.to)}`]);
+    if (left() > ci.add) opts.push(["raise", rt.allin ? "All-in" : "Raise", `para ${money(rt.to)}`]);
   } else {
     opts.push(["check", "Check", ""]);
-    if (left() > 0) opts.push(["raise", s === "pre" ? (raiseTo.allin ? "All-in" : "Raise") : (raiseTo.allin ? "All-in" : "Aposta"), money(raiseTo.to)]);
+    if (left() > 0) opts.push(["raise", s === "pre" ? (rt.allin ? "All-in" : "Raise") : (rt.allin ? "All-in" : "Aposta"), money(rt.to)]);
   }
-  const btns = opts.map(([t, l, sub]) => `<button type="button" class="fbtn act ${t === sug ? "sug r-" + tone : ""}" data-act="fh" data-t="${t}" ${t === "raise" ? `data-to="${raiseTo.to}"` : ""}>${l}${sub ? `<small>${sub}</small>` : ""}</button>`).join("");
   let h = `<div class="fban r-${tone}" id="result-${s}"><div class="fact">${v.action}</div>${sizeText(v) ? `<div class="fsize">${sizeText(v)}</div>` : ""}<div class="fline">${line}</div></div>
-    <p class="fq sm">O que você fez?</p><div class="fgrid act">${btns}</div>
-    <button type="button" class="linkbtn more" data-act="heroask">Apostei/aumentei outro valor</button>`;
-  if (d.heroAmt) h += amtHTML("hero");
-  h += `<button type="button" class="linkbtn more why" data-act="fwhy">${S.fwhy ? "▾" : "▸"} Ver por quê (tabela, ranges, outs)</button>`;
-  if (S.fwhy){
-    let body = `<p class="reason">${v.reason}</p>`;
-    if (s !== "pre"){
-      const pos = Math.min(Math.max(v.req * 100, 0), 100), edge = pos < 14 ? "el" : pos > 86 ? "er" : "";
-      body += `<div class="meter"><div class="fill" style="width:${(v.eq * 100).toFixed(1)}%"></div><div class="need ${edge}" style="left:${pos.toFixed(1)}%"><span>${v.hasBet ? "precisa" : "sua parte"} ${pct(v.req)}</span></div></div>
-        <div class="legend"><span>Você ganha <b>${pct(v.eq)}</b></span><span>${v.hasBet ? "Precisa para pagar" : "Sua parte do pote"} <b>${pct(v.req)}</b></span></div>`;
-      body += villsHTML(s);
-    }
-    h += `<div class="fwhy">${body}<div class="below">${s === "pre" ? preBelow(v, d) : postBelow(s, v, d)}</div></div>`;
+    <p class="reason">${v.reason}</p>
+    <p class="q sm">O que você fez?</p><div class="fgrid act">${opts.map(([t, l, sub]) => `<button type="button" class="fbtn act ${t === sug ? "sug r-" + tone : ""}" data-act="hero" data-t="${t}" ${t === "raise" ? `data-to="${rt.to}"` : ""} aria-label="Você: ${l}">${l}${sub ? `<small>${sub}</small>` : ""}</button>`).join("")}</div>
+    <button type="button" class="linkbtn more" data-act="heroask">${S.ui.heroAmt ? "▾" : "▸"} Apostei/aumentei outro valor</button>`;
+  if (S.ui.heroAmt){
+    const P = potNow(d), L = left();
+    const list = tc > 0 || s === "pre"
+      ? [2.5, 3, 4].map(x => { const base = tc > 0 ? d.villStreet : S.cfg.bb; return { v: r2(base * x), big: money(r2(base * x)), sub: tc > 0 ? `${fmtNum(x)}x` : `${fmtNum(x)} BB` }; })
+      : potFracs(P, 0, false).map(o => ({ ...o, v: r2(d.villStreet + o.v) }));
+    if (L > 0) list.push({ v: r2(d.heroStreet + L), big: "All-in", sub: money(d.heroStreet + L) });
+    h += amtRow("heroamt", "", list);
   }
+  h += `<div class="below">${s === "pre" ? preBelow(v, d) : postBelow(s, v, d)}</div>`;
   el.innerHTML = h;
 }
-const _render = render;
-render = function(){
-  document.querySelectorAll("[data-act=mode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === S.mode));
-  if (S.mode !== "fast") return _render();
-  $("cfgBtn").innerHTML = cfgBtnHTML();
-  $("cfgPanel").innerHTML = S.showCfg ? cfgHTML() : "";
-  renderFast();
-};
-const _renderResult = renderResult;
-renderResult = function(s){ return S.mode === "fast" ? renderFastRes(s) : _renderResult(s); };
-const _cfgHTML = cfgHTML;
-cfgHTML = function(){
-  return _cfgHTML().replace('<div class="note full"', `<div class="fl full"><label>Jogadores na mesa</label><div class="nplay">${[2,3,4,5,6,7,8,9].map(k => `<button type="button" class="chip ${S.cfg.players === k ? "sel" : ""}" data-act="players" data-n="${k}">${k}</button>`).join("")}</div></div><div class="note full"`);
-};
-function fastNew(){
-  const p = S.pos;
-  newHand();
-  if (p && S.mode === "fast"){ S.pos = S.sugPos; S.sugPos = null; S.editPos = false; S.autoPos = true; save(); }
-  S.fwhy = false; S.fmore = false; S.fcustom = null;
-  S.scrollTo = null; window.scrollTo({ top: 0, behavior: "smooth" });
+function preBelow(v, d){
+  const code = handCode(S.hero[0], S.hero[1]), mode = v.mode, p = S.pos, n = S.cfg.players;
+  const mine = chartGrid(c => chartAction(c, mode, p), code);
+  const labels = mode === "vsraise" ? { raise: "Raise (3-bet)", call: "Call", fold: "Fold" } : mode === "vs3bet" ? { raise: "Raise (4-bet)", call: "Call", fold: "Fold" } : mode === "vs4bet" ? { raise: "All-in", fold: "Fold" } : mode === "limp" ? { raise: "Raise", check: "Check" } : { raise: "Raise", fold: "Fold" };
+  const title = { open: `Tabela do ${p}: ninguém aumentou`, limp: "Tabela do big blind: ninguém aumentou", vsraise: `Tabela do ${p}: contra um aumento`, vs3bet: "Tabela: aumentaram por cima de você", vs4bet: "Tabela: 4-bet ou mais" }[mode];
+  let h = `<div class="panel2"><h3>${title}</h3><p class="lead">Mesa de ${n}. Sua mão (${code}) está com contorno.</p>${mine.html}
+    <div class="rlegend">${Object.entries(labels).map(([k, t]) => `<span class="${k}">${t} · ${pct((mine.cnt[k] || 0) / 1326)}</span>`).join("")}</div></div>`;
+  const vl = S.vills;
+  if (vl.length){
+    const e = eqFor(S.hero, [], vl);
+    h += `<button type="button" class="linkbtn more why" data-act="why">${S.ui.why ? "▾" : "▸"} Quem está na mão e o range deles</button>`;
+    if (S.ui.why) h += `<div class="panel2"><p class="lead">${vl.map(x => `<b>${x.label}</b> (${baseName(x.base).toLowerCase()}, ${pct(vShare(x))} das mãos)`).join(" · ")}.${e ? ` Contra eles, ${code} ganha <b>${pct(e.eq)}</b> das vezes.` : ""}</p>
+      <p class="lead" style="margin-top:8px">Range de <b>${vl[0].label}</b>:</p>${villChart(vl[0], code)}<div class="rlegend"><span class="vil">Mãos que ele pode ter</span><span class="out">Fora do range</span></div></div>`;
+  }
+  return h;
 }
+function postBelow(s, v, d){
+  const e = v.e, board = boardFor(s), code = handCode(S.hero[0], S.hero[1]), main = S.vills[0];
+  let facts = "";
+  if (board.length < 5){
+    const o = computeOuts(S.hero, board);
+    facts += `<li><span class="ic">${o.n}</span><div><b>${o.n} outs</b>: cartas que melhoram sua mão. Chance de vir ${board.length === 3 ? "até o river" : "no river"}: <b>${pct(o.prob)}</b> (de cabeça: ${o.n} × ${board.length === 3 ? 4 : 2} ≈ ${o.rule}%).${o.n ? `<div class="mini" style="flex-wrap:wrap;margin-top:6px">${o.list.map(x => miniCard(x.c)).join("")}</div>` : ""}</div></li>`;
+  }
+  facts += S.vills.map(x => { const n2 = villainNow(board, x); return `<li><span class="ic v">${x.label.slice(0, 2)}</span><div><b>${x.label}</b>: <b>${pct(n2.ahead)}</b> das mãos dele já te ganham agora.</div></li>`; }).join("");
+  let h = `<ul class="facts">${facts}</ul><button type="button" class="linkbtn more why" data-act="why">${S.ui.why ? "▾" : "▸"} Ver mais (range do vilão e números)</button>`;
+  if (!S.ui.why) return h;
+  const vn = villainNow(board, main);
+  let bars = "";
+  for (let k = 8; k >= 0; k--){ const p = vn.cat[k]; if (p < 0.005) continue; bars += `<div class="bar vb ${k > vn.heroCat ? "ahead" : ""}"><span>${CAT_V[k]}</span><div class="t"><span style="width:${(p * 100).toFixed(1)}%"></span></div><em>${pct(p)}</em></div>`; }
+  const tc = toCall(d), hasBet = tc > 0, c = hasBet ? callInfo(d).add : 0, P = potNow(d);
+  const ev = hasBet ? e.eq * (P + c) - c : 0, L = left(), spr = L > 0 && P > 0 ? L / P : 0;
+  return h + `<div class="panel2"><h3>O que ${main.label} pode ter</h3><p class="lead">O range muda com o que ele fez. Em negrito, o que ganha do seu jogo.</p><div class="dist">${bars}</div>${villChart(main, code)}</div>
+    <div class="panel2"><h3>Números</h3><dl class="kv">
+      <div><dt>Você ganha / empata</dt><dd>${pct(e.win, 1)} / ${pct(e.tie, 1)}</dd></div>
+      <div><dt>EV do call</dt><dd class="${hasBet ? (ev >= 0 ? "pos" : "neg") : ""}">${hasBet ? (ev >= 0 ? "+" : "") + money(ev) : "—"}</dd></div>
+      <div><dt>Odds do pote</dt><dd>${hasBet ? `${fmtNum(P / c, 1)} : 1` : "—"}</dd></div>
+      <div><dt>SPR</dt><dd>${spr ? fmtNum(spr, 1) : "—"}<small>${spr ? (spr <= 3 ? "baixo: top pair já pode ir all-in" : spr <= 8 ? "médio" : "alto: só mão muito forte vai all-in") : ""}</small></dd></div>
+    </dl></div>`;
+}
+function cfgHTML(){
+  return `<div class="cfg">
+    <div class="fl"><label>Blinds</label><div class="pair"><input class="inp" id="c-sb" inputmode="decimal" value="${fmtNum(S.cfg.sb, 2)}" aria-label="Small blind"><span>/</span><input class="inp" id="c-bb" inputmode="decimal" value="${fmtNum(S.cfg.bb, 2)}" aria-label="Big blind"></div><span class="help">Small / big. Ex.: 1/2</span></div>
+    <div class="fl"><label for="c-buyin">Buy-in total</label><input class="inp" id="c-buyin" inputmode="decimal" value="${fmtNum(S.cfg.buyin, 2)}"><span class="help">Quanto comprou na sessão, com recompras.</span></div>
+    <div class="fl"><label for="c-stack">Seu stack agora</label><input class="inp" id="c-stack" inputmode="decimal" value="${fmtNum(S.cfg.stack, 2)}"><span class="help">Atualiza sozinho quando você marca Ganhei/Perdi.</span></div>
+    <div class="fl"><label for="c-vstack">Stack do vilão</label><input class="inp" id="c-vstack" inputmode="decimal" value="${fmtNum(S.cfg.vstack, 2)}"><span class="help">Do adversário principal.</span></div>
+    <div class="fl full"><label>Jogadores na mesa</label><div class="nplay">${[2,3,4,5,6,7,8,9].map(k => `<button type="button" class="chip ${S.cfg.players === k ? "sel" : ""}" data-act="players" data-n="${k}">${k}</button>`).join("")}</div></div>
+    <div class="note full" id="cfgNote">${cfgNote()}</div>
+    <button type="button" class="primary full" data-act="cfg" style="margin-top:0">Fechar</button>
+  </div>`;
+}
+function cfgNote(){
+  const diff = S.cfg.stack - S.cfg.buyin;
+  return `Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>. Seu stack: <b>${bbs(S.cfg.stack)}</b>. Stack efetivo: <b>${money(eff())}</b> (${bbs(eff())}).`;
+}
+function afterRender(){
+  if (S.scrollTo){
+    const id = S.scrollTo; S.scrollTo = null;
+    requestAnimationFrame(() => { const el = $(id) || $("result-" + S.cur); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); });
+  }
+}
+
+/* ---------- Eventos ---------- */
+const readNum = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isFinite(n) && n > 0 ? n : 0; };
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
-  const act = b.dataset.act, s = S.cur, d = heroOK() && S.pos ? (s === "pre" ? pre() : S.st[s]) : null;
+  const act = b.dataset.act, s = S.cur, ready = heroOK() && S.pos && !S.editPos;
+  const d = ready ? (s === "pre" ? pre() : S.st[s]) : null;
   const val = () => b.dataset.custom ? readNum(($("famt") || {}).value || "") : +b.dataset.v;
   switch (act){
-    case "mode": S.mode = b.dataset.m; try { localStorage.setItem("outsodds-mode", S.mode); } catch (e2) {} if (S.mode === "full" && !S.pos) S.editPos = true; break;
-    case "undo": { const js = UNDO.pop(); if (js) restoreState(js); break; }
-    case "fwhy": S.fwhy = !S.fwhy; break;
-    case "fmore": S.fmore = !S.fmore; break;
-    case "fcustom": S.fcustom = S.fcustom === b.dataset.k ? null : b.dataset.k; break;
-    case "fnew": fastNew(); break;
-    case "fa": {
-      if (!d) return; const k = b.dataset.k; S.fcustom = null;
-      if (k === "no") answerNo();
-      else { const v = val(); if (!(v > 0)) return; if (k === "pre") answerPreRaise(v); else villBet(v, d.bettor || 0, d.pre || 0); }
-      S.fmore = false; break;
+    case "cfg": S.showCfg = !S.showCfg; break;
+    case "players": {
+      S.cfg.players = +b.dataset.n;
+      if (S.pos && !order().includes(S.pos)){ S.pos = null; S.editPos = true; }
+      if (S.vrPos && !order().includes(S.vrPos)) S.vrPos = null;
+      save(); if (S.st.pre && !S.st.pre.heroActed) buildPre(S.st.pre); break;
     }
-    case "fh": { if (!d) return; S.fwhy = false; heroAct(b.dataset.t, b.dataset.to ? +b.dataset.to : 0); break; }
-    case "fr": {
-      if (!d) return; const k = b.dataset.k; S.fcustom = null;
-      if (k[0] === "c" && k !== "check") respCalled(+k.slice(1));
-      else if (k === "over"){ d.respAsk = d.respAsk === "over" ? null : "over"; }
-      else if (k === "fold"){ d.log.push({ w: "vil", t: "Todos largaram" }); endHand("won"); }
-      else if (k === "check") respChecked();
-      else if (k === "bet"){ const v = val(); if (!(v > 0)) return; villBet(v, d.bettor || 0, 0); }
-      break;
+    case "pos": S.pos = b.dataset.p; S.sugPos = null; S.editPos = false; S.autoPos = false; save(); if (S.st.pre && !S.st.pre.heroActed){ S.vrPos = null; buildPre(S.st.pre); } S.scrollTo = heroOK() ? "st-" + S.cur : "st-hand"; break;
+    case "editpos": S.editPos = true; break;
+    case "edithand": S.editHand = true; S.scrollTo = "st-hand"; break;
+    case "handok": S.editHand = false; S.scrollTo = "st-" + S.cur; break;
+    case "card": placeCard(+b.dataset.c); break;
+    case "slot": { const i = +b.dataset.i; if (b.dataset.k === "hero"){ S.hero[i] = null; S.editHand = true; } else S.board[i] = null; break; }
+    case "undo": { const x = TL.pop(); if (x) restoreState(x.snap); break; }
+    case "tl": { const i = +b.dataset.i, x = TL[i]; if (x){ restoreState(x.snap); TL.length = i; } S.ui.hist = false; break; }
+    case "hist": S.ui.hist = !S.ui.hist; break;
+    case "custom": S.ui.custom = S.ui.custom === b.dataset.k ? null : b.dataset.k; break;
+    case "more": S.ui.more = !S.ui.more; break;
+    case "more2": S.ui.more2 = !S.ui.more2; break;
+    case "why": S.ui.why = !S.ui.why; break;
+    case "heroask": S.ui.heroAmt = !S.ui.heroAmt; break;
+    // pré-flop: formulário
+    case "limpers": if (!d) return; d.limpers = +b.dataset.n; buildPre(d); break;
+    case "noraise": if (!d) return; d.raise = null; d.callers = 0; S.vrPos = null; buildPre(d); d.phase = "decide"; S.ui.custom = null; S.scrollTo = "res-pre"; break;
+    case "raise": { if (!d) return; const v = val(); if (!(v > 0)) return; d.raise = r2(v); buildPre(d); d.phase = "decide"; S.ui.custom = null; S.scrollTo = "res-pre"; break; }
+    case "raiser": if (!d) return; S.vrPos = b.dataset.p || null; if (d.callers > maxCallers()) d.callers = maxCallers(); buildPre(d); break;
+    case "callers": if (!d) return; d.callers = +b.dataset.n; buildPre(d); break;
+    // pré-flop: respostas
+    case "pcalled": preCalled(+b.dataset.k); break;
+    case "pover": d.respAsk = d.respAsk === "over" ? null : "over"; break;
+    case "povamt": { const v = val(); if (!(v > d.heroStreet)) return; S.ui.custom = null; preOver(v); break; }
+    case "pfold": d.log.push({ w: "vil", t: "Todos largaram" }); endHand("won"); break;
+    case "pcallers": preCallers(+b.dataset.k); break;
+    // depois do flop
+    case "nobet": d.log = [{ w: "vil", t: "Ninguém apostou" }]; d.phase = "decide"; S.scrollTo = "res-" + s; break;
+    case "vbet": { const v = val(); if (!(v > 0)) return; S.ui.custom = null; S.ui.more = false; villBet(v, d.bettor || 0, d.pre || 0); break; }
+    case "vbet2": { const v = val(); if (!(v > 0)) return; S.ui.custom = null; villBet(v, 0, 0); break; }
+    case "bettor": d.bettor = +b.dataset.n; break;
+    case "precall": d.pre = +b.dataset.n; break;
+    case "overwho": d.overWho = +b.dataset.n; break;
+    case "vcalled": postCalled(+b.dataset.k); break;
+    case "vover": d.respAsk = d.respAsk === "over" ? null : "over"; break;
+    case "vovamt": { const v = val(); if (!(v > d.heroStreet)) return; S.ui.custom = null; postOver(v, d.overWho || 0); break; }
+    case "vfold": d.log.push({ w: "vil", t: "Todos largaram" }); endHand("won"); break;
+    case "vchecked": postChecked(); break;
+    case "vcount": {
+      const dd = +b.dataset.d;
+      if (dd > 0 && S.vills.length < nOthers()) S.vills.push(mkV(`Jogador ${S.vills.length + 1}`, "normal"));
+      if (dd < 0 && S.vills.length > 1) S.vills.pop();
+      if (S.editV != null && S.editV >= S.vills.length) S.editV = null;
+      RV++; break;
     }
+    case "editv": { const i = +b.dataset.n; S.editV = S.editV === i ? null : i; break; }
+    case "vbase": { const v = S.vills[S.editV]; if (v){ v.base = b.dataset.k; recalc(v); } break; }
+    // você
+    case "hero": { if (!d) return; S.ui.why = false; const t = b.dataset.t, to = b.dataset.to ? +b.dataset.to : 0; if (s === "pre") preHero(t, to); else postHero(t, to); break; }
+    case "heroamt": { if (!d) return; const v = val(); if (!(v > 0)) return; S.ui.custom = null; if (s === "pre") preHero("raise", v); else postHero("raise", v); break; }
+    case "result": { const r = b.dataset.r; applyResult(r === "won" ? S.end.pot : r === "split" ? S.end.pot / 2 : 0); break; }
+    case "goto": { const i = TL.findIndex(x => x.label.startsWith(SNAME[b.dataset.s] + ":")); if (i >= 0){ restoreState(TL[i].snap); TL.length = i; } S.scrollTo = "st-" + S.cur; break; }
+    case "new": newHand(); break;
     default: return;
   }
-  if (S.mode === "fast" && act !== "fwhy" && act !== "fmore" && act !== "fcustom" && act !== "undo") S.scrollTo = S.end ? "endcard" : (S.st[S.cur] && S.st[S.cur].phase === "decide" ? "res-" + S.cur : "st-" + S.cur);
-  if (act === "card" || act === "fnew") {}
   render();
 });
-// No modo rápido, a seleção de cartas e as ações do modo completo também levam o scroll para a pergunta certa
-document.addEventListener("click", e => {
-  const b = e.target.closest("[data-act]"); if (!b || S.mode !== "fast") return;
-  if (b.dataset.act === "pos"){ S.autoPos = false; }
-  if (b.dataset.act === "card" && heroOK()) S.autoPos = false;
-}, true);
+document.addEventListener("input", e => {
+  const id = e.target.id || "";
+  if (id.startsWith("c-")){
+    const k = id.slice(2); S.cfg[k] = readNum(e.target.value); save();
+    const p0 = S.st.pre;
+    if (!p0 || !p0.heroActed){ S.handStack = S.cfg.stack; S.vstackStart = S.cfg.vstack; if (p0) buildPre(p0); }
+    $("cfgBtn").innerHTML = cfgBtnHTML();
+    const n = $("cfgNote"); if (n) n.innerHTML = cfgNote();
+    return;
+  }
+  if (id.startsWith("pot-")){
+    const d = S.st[id.slice(4)];
+    if (d){ d.potStart = readNum(e.target.value); const sub = document.querySelector(`#st-${id.slice(4)} .sh .sub`); if (sub) sub.textContent = `pote ${money(potNow(d))}`; renderResult(S.cur); }
+  }
+});
 
 render();
 

@@ -1,5 +1,5 @@
 // Outs & Odds — service worker: guarda o app no aparelho para abrir sem internet.
-const CACHE = "outs-odds-v9";
+const CACHE = "outs-odds-v10";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
