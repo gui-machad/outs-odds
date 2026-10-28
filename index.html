@@ -375,6 +375,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .tlbtn{width:100%;text-align:left;display:flex;gap:10px;align-items:center;border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600}
 .tlbtn span{font-size:18px;color:var(--accent)}
 .fban{scroll-margin-top:84px}
+.sh .sub{white-space:nowrap}
+.fbtn{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -517,7 +519,8 @@ const CAT_V = ["Nada (carta alta)","Um par","Dois pares","Trinca","Sequência","
 const rl = r => r === 8 ? "10" : RANKS[r];
 const fmtNum = (x, d = 1) => (+x).toLocaleString("pt-BR", { maximumFractionDigits: d });
 const pct = (x, d = 0) => (x * 100).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
-const money = x => fmtNum(x, 2);
+const money = x => "R$\u00a0" + fmtNum(x, 2);
+const chip = x => S.cfg.bb >= 1 ? Math.round(x) : Math.round(x * 100) / 100;
 const r2 = x => Math.round(x * 100) / 100;
 const $ = id => document.getElementById(id);
 
@@ -762,7 +765,7 @@ try {
 S.handStack = S.cfg.stack; S.vstackStart = S.cfg.vstack;
 function save(){ try { localStorage.setItem("outsodds3", JSON.stringify({ cfg: S.cfg, pos: S.pos || S.sugPos })); } catch (e) {} }
 
-const bbs = x => S.cfg.bb > 0 ? `${fmtNum(x / S.cfg.bb, 1)} BB` : "";
+const bbs = x => S.cfg.bb > 0 ? `${fmtNum(x / S.cfg.bb, 1)}x o big` : "";
 const heroOK = () => S.hero.every(c => c != null);
 const usedSet = () => new Set([...S.hero, ...S.board].filter(c => c != null));
 const boardFor = s => S.board.slice(0, NBOARD[s]);
@@ -874,7 +877,8 @@ function villainNow(board, v){
 function sized(d, to){
   const L = left(), add = r2(to - d.heroStreet);
   if (L > 0 && add >= L * 0.85) return { to: r2(d.heroStreet + L), add: L, allin: true };
-  return { to: r2(to), add, allin: false };
+  const t = Math.max(chip(to), d.heroStreet);
+  return { to: t, add: r2(t - d.heroStreet), allin: false };
 }
 function callInfo(d){ const L = left(), tc = toCall(d); return { add: Math.min(tc, L), allin: L > 0 && tc >= L }; }
 function preMode(d){ return d.level === 0 ? (S.pos === "BB" ? "limp" : "open") : d.level === 1 ? "vsraise" : d.level === 2 ? "vs3bet" : "vs4bet"; }
@@ -885,7 +889,7 @@ function verdictPre(d){
     ? { action: "Raise", ...sized(d, (4 + lim) * bb), mode, reason: `Ninguém aumentou e você está no big blind. ${code} é forte: aumente.` }
     : { action: "Check", mode, reason: `Ninguém aumentou e você já pagou o big blind: dê check e veja o flop de graça.` };
   if (mode === "open") return act === "raise"
-    ? { action: "Raise", ...sized(d, (3 + lim) * bb), mode, reason: `${code} é boa para jogar do ${p} numa mesa de ${S.cfg.players}. Entre aumentando${lim ? ` (1 BB a mais para cada limper)` : ""}.` }
+    ? { action: "Raise", ...sized(d, (3 + lim) * bb), mode, reason: `${code} é boa para jogar do ${p} numa mesa de ${S.cfg.players}. Entre aumentando${lim ? ` (${money(S.cfg.bb)} a mais para cada limper)` : ""}.` }
     : { action: "Fold", mode, reason: `${code} não é boa o bastante para jogar do ${p} numa mesa de ${S.cfg.players}. Largue a mão.` };
   const ci = callInfo(d);
   if (mode === "vsraise"){
@@ -924,7 +928,7 @@ function verdictPost(d, e){
 }
 const TONE = { Raise: "raise", Aposte: "raise", Call: "call", Check: "check", Fold: "fold" };
 function sizeText(v){
-  if (v.action === "Raise") return v.allin ? `All-in: ${money(v.to)}` : `Aumente para ${money(v.to)} (${bbs(v.to)})`;
+  if (v.action === "Raise") return v.allin ? `All-in: ${money(v.to)}` : `Aumente para ${money(v.to)}`;
   if (v.action === "Aposte") return v.allin ? `All-in: ${money(v.to)}` : `Aposte ${money(v.to)} (⅔ do pote)`;
   if (v.action === "Call") return v.allin ? `Pague all-in: ${money(v.add)}` : `Pague ${money(v.add)}`;
   if (v.action === "Fold" && v.marginal) return "Decisão apertada";
@@ -1160,17 +1164,17 @@ function fbtn(act, k, label, sub, extra = "", cls = ""){
   return `<button type="button" class="fbtn ${cls}" data-act="${act}" data-k="${k}" ${extra} aria-label="${label}${sub ? " " + sub : ""}">${label}${sub ? `<small>${sub}</small>` : ""}</button>`;
 }
 function customRow(act, k){
-  return `<div class="custom"><input class="inp" id="famt" type="text" inputmode="decimal" autocomplete="off" placeholder="valor"><button type="button" class="fbtn ok" data-act="${act}" data-k="${k}" data-custom="1">OK</button></div>`;
+  return `<div class="custom"><input class="inp" id="famt" type="text" inputmode="decimal" autocomplete="off" placeholder="valor em R$"><button type="button" class="fbtn ok" data-act="${act}" data-k="${k}" data-custom="1">OK</button></div>`;
 }
 function amtRow(act, k, list, sel){
   return `<div class="fgrid">${list.map(o => fbtn(act, k, o.big, o.sub, `data-v="${o.v}"`, sel === o.v ? "on" : "")).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="${act}-${k}">Outro valor</button></div>${S.ui.custom === `${act}-${k}` ? customRow(act, k) : ""}`;
 }
 function potFracs(P, L, withAllin = true){
-  const l = [[1/3,"⅓ pote"],[0.5,"½ pote"],[0.66,"⅔ pote"],[1,"pote"]].map(([f, t]) => ({ v: r2(P * f), big: money(r2(P * f)), sub: t }));
+  const l = [[1/3,"⅓ pote"],[0.5,"½ pote"],[0.66,"⅔ pote"],[1,"pote"]].map(([f, t]) => ({ v: chip(P * f), big: money(chip(P * f)), sub: t }));
   if (withAllin && L > 0) l.push({ v: r2(L), big: "All-in", sub: money(L) });
   return l;
 }
-function cfgBtnHTML(){ return `⚙︎ <b>${fmtNum(S.cfg.sb, 2)}/${fmtNum(S.cfg.bb, 2)}</b> · ${S.cfg.players} jog. · <b>${fmtNum(S.cfg.stack, 0)}</b>`; }
+function cfgBtnHTML(){ return `⚙︎ Blinds <b>R$ ${fmtNum(S.cfg.sb, 2)}/${fmtNum(S.cfg.bb, 2)}</b> · ${S.cfg.players} jog. · stack <b>${money(S.cfg.stack)}</b>`; }
 function barHTML(){
   const d = S.st[S.cur], brd = S.board.filter(c => c != null);
   const hero = heroOK() ? `<span class="mini">${miniCard(S.hero[0])}${miniCard(S.hero[1])}</span>` : `<span class="fb-empty">cartas</span>`;
@@ -1240,7 +1244,7 @@ function preHTML(d, num){
   if (!d.heroActed){
     h += `<p class="q">Quantos só pagaram o blind (limp) antes de você?</p>${countChips("limpers", 0, nBefore(), d.limpers || 0)}`;
     h += `<p class="q" id="q-pre">${S.pos === "BB" ? "Alguém aumentou?" : "Alguém aumentou antes de você?"}</p>`;
-    const opts = [2.5, 3, 4, 5, 6].map(x => ({ v: r2(x * bb), big: `${fmtNum(x)} BB`, sub: `para ${money(x * bb)}` }));
+    const opts = [2, 2.5, 3, 4, 5, 6].map(x => ({ v: chip(x * bb), big: money(chip(x * bb)), sub: "" }));
     h += `<div class="fgrid">${fbtn("noraise", "", "Não", "ninguém", "", d.phase !== "ask" && !d.raise ? "on no" : "no")}${opts.map(o => fbtn("raise", "", o.big, o.sub, `data-v="${o.v}"`, d.raise === o.v ? "on" : "")).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="raise-">Outro valor</button></div>${S.ui.custom === "raise-" ? customRow("raise", "") : ""}`;
     if (d.raise){
       const before = order().slice(0, order().indexOf(S.pos)), opts2 = before.length ? before : order().filter(p => p !== S.pos);
@@ -1254,9 +1258,9 @@ function preHTML(d, num){
     if (d.phase === "resp"){
       h += `<p class="q" id="q-pre">E eles, depois do seu aumento?</p><div class="fgrid">`;
       for (let i = 1; i <= nOthers(); i++) h += fbtn("pcalled", i, i === 1 ? "1 pagou" : `${i} pagaram`, "");
-      if (left() > 0) h += fbtn("pover", "", "Aumentaram", "por cima ▸", "", d.respAsk === "over" ? "on" : "");
+      if (left() > 0) h += fbtn("pover", "", "Aumento", "por cima ▸", "", d.respAsk === "over" ? "on" : "");
       h += fbtn("pfold", "", "Largaram", "pote é seu") + `</div>`;
-      if (d.respAsk === "over") h += `<p class="q sm">Aumentaram para quanto?</p>${amtRow("povamt", "", [2.5, 3, 4].map(x => ({ v: r2(d.heroStreet * x), big: money(r2(d.heroStreet * x)), sub: `${fmtNum(x)}x` })).concat(left() > 0 ? [{ v: r2(d.heroStreet + left()), big: "All-in", sub: money(d.heroStreet + left()) }] : []))}`;
+      if (d.respAsk === "over") h += `<p class="q sm">Aumentaram para quanto?</p>${amtRow("povamt", "", [2, 2.5, 3, 4].map(x => ({ v: chip(d.heroStreet * x), big: money(chip(d.heroStreet * x)), sub: `${fmtNum(x)}x a sua` })).concat(left() > 0 ? [{ v: r2(d.heroStreet + left()), big: "All-in", sub: money(d.heroStreet + left()) }] : []))}`;
     } else if (d.phase === "callpre"){
       const pend = d.others.filter(o => !o.folded && o.a < d.villStreet).length;
       h += `<p class="q" id="q-pre">Depois do seu call, mais alguém pagou?</p><p class="qhelp">Quem ainda tinha que falar: ${d.others.filter(o => !o.folded && o.a < d.villStreet).map(o => o.w).join(", ")}.</p><div class="fgrid">${fbtn("pcallers", 0, "Ninguém", "largaram", "", "no")}`;
@@ -1304,7 +1308,7 @@ function postHTML(s, d, num){
       h += fbtn("vfold", "", "Largaram", "pote é seu") + `</div>`;
       if (d.respAsk === "over"){
         if (S.vills.length > 1) h += `<p class="q sm">Quem aumentou?</p>${whoChips("overwho", d.overWho || 0)}`;
-        h += `<p class="q sm">Aumentou para quanto?</p>${amtRow("vovamt", "", [2.5, 3, 4].map(x => ({ v: r2(d.heroStreet * x), big: money(r2(d.heroStreet * x)), sub: `${fmtNum(x)}x` })).concat(L > 0 ? [{ v: r2(d.heroStreet + L), big: "All-in", sub: money(d.heroStreet + L) }] : []))}`;
+        h += `<p class="q sm">Aumentou para quanto?</p>${amtRow("vovamt", "", [2, 2.5, 3, 4].map(x => ({ v: chip(d.heroStreet * x), big: money(chip(d.heroStreet * x)), sub: `${fmtNum(x)}x a sua` })).concat(L > 0 ? [{ v: r2(d.heroStreet + L), big: "All-in", sub: money(d.heroStreet + L) }] : []))}`;
       }
     } else {
       h += `<p class="q" id="q-${s}">Depois do seu check:</p><div class="fgrid">${fbtn("vchecked", "", "Todos check", "próxima carta", "", "no")}${potFracs(P, L).map(o => fbtn("vbet2", "", o.big, `apostaram ${o.sub}`, `data-v="${o.v}"`)).join("")}<button type="button" class="fbtn ghosty" data-act="custom" data-k="vbet2-">Outro valor</button></div>${S.ui.custom === "vbet2-" ? customRow("vbet2", "") : ""}`;
@@ -1323,7 +1327,7 @@ function endHTML(){
   const diff = r2(S.cfg.stack - S.cfg.buyin);
   return `<section class="step cur endcard" id="endcard"><p class="q" style="margin-top:0">${title}</p>
     <div class="net ${e.net >= 0 ? "pos" : "neg"}">${e.net >= 0 ? "+" : "−"}${money(Math.abs(e.net))}</div>
-    <p class="qhelp">Seu stack: <b>${money(S.handStack)}</b> → <b>${money(S.cfg.stack)}</b>${S.cfg.bb > 0 ? ` (${bbs(S.cfg.stack)})` : ""}. Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>.</p>
+    <p class="qhelp">Seu stack: <b>${money(S.handStack)}</b> → <b>${money(S.cfg.stack)}</b>. Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>.</p>
     ${S.cfg.stack <= 0 ? `<p class="qhelp"><b>Seu stack zerou.</b> Se fez recompra, abra a engrenagem lá em cima e atualize "Seu stack" e "Buy-in total".</p>` : ""}
     <button type="button" class="primary big" data-act="new">Nova mão →</button></section>`;
 }
@@ -1372,7 +1376,7 @@ function renderResult(s){
   if (S.ui.heroAmt){
     const P = potNow(d), L = left();
     const list = tc > 0 || s === "pre"
-      ? [2.5, 3, 4].map(x => { const base = tc > 0 ? d.villStreet : S.cfg.bb; return { v: r2(base * x), big: money(r2(base * x)), sub: tc > 0 ? `${fmtNum(x)}x` : `${fmtNum(x)} BB` }; })
+      ? [2.5, 3, 4].map(x => { const base = tc > 0 ? d.villStreet : S.cfg.bb; return { v: chip(base * x), big: money(chip(base * x)), sub: "" }; })
       : potFracs(P, 0, false).map(o => ({ ...o, v: r2(d.villStreet + o.v) }));
     if (L > 0) list.push({ v: r2(d.heroStreet + L), big: "All-in", sub: money(d.heroStreet + L) });
     h += amtRow("heroamt", "", list);
@@ -1432,7 +1436,7 @@ function cfgHTML(){
 }
 function cfgNote(){
   const diff = S.cfg.stack - S.cfg.buyin;
-  return `Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>. Seu stack: <b>${bbs(S.cfg.stack)}</b>. Stack efetivo: <b>${money(eff())}</b> (${bbs(eff())}).`;
+  return `Na sessão: <b class="${diff >= 0 ? "pos" : "neg"}">${diff >= 0 ? "+" : "−"}${money(Math.abs(diff))}</b>. Seu stack: <b>${money(S.cfg.stack)}</b>. Stack efetivo (o máximo em jogo contra o vilão): <b>${money(eff())}</b>.`;
 }
 function afterRender(){
   if (S.scrollTo){
