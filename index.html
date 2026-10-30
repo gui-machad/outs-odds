@@ -303,6 +303,16 @@ details.more[open] summary{margin-bottom:4px}
 .vchip small{font-size:11px;color:var(--muted)}
 .vchip.sel{background:var(--vil-soft)}
 .rc.vw{background:color-mix(in srgb,var(--vil-fill) var(--w),var(--surface-2));color:var(--ink)}
+button.rc{border:0;padding:0;cursor:pointer;line-height:1;min-width:0}
+button.rc:active{transform:scale(.92)}
+.rc.ed{outline:2px dashed var(--ink);outline-offset:-2px}
+.rlegend .edl::before{background:transparent;outline:2px dashed var(--ink);outline-offset:-2px}
+.chips .chip small.chint{display:block;font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--muted)}
+.chips .chip.sel small.chint{color:inherit;opacity:.8}
+.chip.cut{text-decoration:line-through;opacity:.55}
+.beat{margin:10px 0 0;font-size:15px}
+.chips.eg2,.chips.eg3{display:grid;gap:6px}.chips.eg2{grid-template-columns:repeat(2,minmax(0,1fr))}.chips.eg3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.chips.eg2 .chip,.chips.eg3 .chip{font-size:14px;padding:5px 6px;min-height:44px}
 /* v8: modo rápido */
 .top{flex-wrap:nowrap}
 @media (max-width:460px){.top h1{display:none}.top .logo{display:none}.seg.mode button{padding:7px 11px}.cfgbtn{padding:7px 10px;font-size:13px}}
@@ -679,14 +689,27 @@ const NARROW = {
   raise: { monster: 1, top: 0.45, pair: 0.12, draw: 0.35, weak: 0.08, air: 0.03 },
   check: { monster: 0.35, top: 0.6, pair: 1, draw: 0.8, weak: 1, air: 1 }
 };
+// Estilo depois do flop: muda o quanto ele aposta/aumenta sem mão (blefe) e o quanto paga com mão fraca
+const STYLE = {
+  passivo:   { name: "Passivo", hint: "quase não blefa", call: { weak: 0.5, air: 0.12 }, bet: { pair: 0.35, draw: 0.4, weak: 0.12, air: 0.04 }, raise: { top: 0.3, pair: 0.06, draw: 0.2, weak: 0.03, air: 0.01 } },
+  normal:    { name: "Normal", hint: "padrão" },
+  agressivo: { name: "Agressivo", hint: "blefa bastante", bet: { draw: 0.85, weak: 0.5, air: 0.35 }, raise: { top: 0.6, pair: 0.25, draw: 0.6, weak: 0.2, air: 0.1 } }
+};
+const BUCKET_ORDER = ["monster", "top", "pair", "draw", "weak", "air"];
+const BUCKET_NAME = { monster: "Dois pares+", top: "Top pair+", pair: "Par médio/baixo", draw: "Draw forte", weak: "Gutshot/overs", air: "Ar (nada)" };
+const narrowFor = (v, t) => ({ ...NARROW[t], ...((STYLE[v.style] || {})[t] || {}) });
 const ACT_NAME = { call: "pagou", bet: "apostou", raise: "aumentou", check: "deu check" };
 let RV = 0;
-function mkV(label, base){ const v = { label, base, hist: [], w: null }; recalc(v); return v; }
+function mkV(label, base){
+  const old = (typeof S !== "undefined" ? S.vills : []).find(x => x.label === label); // mantém o ajuste manual quando o vilão é recriado
+  const v = { label, base, hist: [], w: null, style: old ? old.style : "normal", ov: old ? { ...old.ov } : {}, cuts: old ? old.cuts.slice() : [] };
+  recalc(v); return v;
+}
 function recalc(v){
-  const set = baseSet(v.base), w = new Float64Array(ALL_COMBOS.length);
+  const set = baseSet(v.base), w = new Float64Array(ALL_COMBOS.length), ov = v.ov || {};
   for (let i = 0; i < w.length; i++) w[i] = !set || set.has(COMBO_CODE[i]) ? 1 : 0;
   for (const h of v.hist){
-    const T = NARROW[h.t], dead = new Set(h.board);
+    const T = narrowFor(v, h.t), dead = new Set(h.board);
     for (let i = 0; i < w.length; i++){
       if (!w[i]) continue;
       const [a, b] = ALL_COMBOS[i];
@@ -694,7 +717,19 @@ function recalc(v){
       w[i] *= T[classify(a, b, h.board)];
     }
   }
+  for (const ct of v.cuts || []){ // "ele não teria isso aqui": zera um tipo de mão naquele board
+    const dead = new Set(ct.board);
+    for (let i = 0; i < w.length; i++){ if (!w[i]) continue; const [a, b] = ALL_COMBOS[i]; if (dead.has(a) || dead.has(b)) continue; if (classify(a, b, ct.board) === ct.k) w[i] = 0; }
+  }
+  if (Object.keys(ov).length) for (let i = 0; i < w.length; i++){ const o = ov[COMBO_CODE[i]]; if (o !== undefined) w[i] = o; } // toque na tabela: manda sobre tudo
   v.w = w; RV++;
+}
+function bucketsNow(v, board){
+  const dead = new Set([...S.hero, ...board]), out = {}; let tot = 0;
+  BUCKET_ORDER.forEach(k => out[k] = 0);
+  for (let i = 0; i < ALL_COMBOS.length; i++){ const w = v.w[i]; if (!w) continue; const [a, b] = ALL_COMBOS[i]; if (dead.has(a) || dead.has(b)) continue; out[classify(a, b, board)] += w; tot += w; }
+  BUCKET_ORDER.forEach(k => out[k] = tot ? out[k] / tot : 0);
+  return out;
 }
 function vAct(v, t, board){ v.hist.push({ t, board: board.slice() }); recalc(v); }
 function vShare(v){
@@ -1098,17 +1133,17 @@ function newHand(){
 const TL = [];
 function snapState(){
   return JSON.stringify({ pos: S.pos, sugPos: S.sugPos, editPos: S.editPos, editHand: S.editHand, hero: S.hero, board: S.board, st: S.st, cur: S.cur, end: S.end, vrPos: S.vrPos,
-    vills: S.vills.map(v => ({ label: v.label, base: v.base, hist: v.hist })), handStack: S.handStack, vstackStart: S.vstackStart, stack: S.cfg.stack, vstack: S.cfg.vstack, autoPos: S.autoPos });
+    vills: S.vills.map(v => ({ label: v.label, base: v.base, hist: v.hist, style: v.style, ov: v.ov, cuts: v.cuts })), handStack: S.handStack, vstackStart: S.vstackStart, stack: S.cfg.stack, vstack: S.cfg.vstack, autoPos: S.autoPos });
 }
 function restoreState(js){
   const o = JSON.parse(js);
   ["pos","sugPos","editPos","editHand","hero","board","st","cur","end","vrPos","handStack","vstackStart","autoPos"].forEach(k => S[k] = o[k]);
   S.cfg.stack = o.stack; S.cfg.vstack = o.vstack;
-  S.vills = o.vills.map(x => { const v = { label: x.label, base: x.base, hist: x.hist, w: null }; recalc(v); return v; });
+  S.vills = o.vills.map(x => { const v = { label: x.label, base: x.base, hist: x.hist, w: null, style: x.style || "normal", ov: x.ov || {}, cuts: x.cuts || [] }; recalc(v); return v; });
   S.ui.custom = null; S.ui.heroAmt = false; S.editV = null;
   save();
 }
-const NO_TL = new Set(["undo","tl","cfg","editv","more","custom","heroask","why","hist","players","new"]);
+const NO_TL = new Set(["vstyle","vcut","vcell","vreset","undo","tl","cfg","editv","more","custom","heroask","why","hist","players","new"]);
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b || b.disabled || NO_TL.has(b.dataset.act)) return;
   let label = (b.getAttribute("aria-label") || b.textContent || "").replace(/\s+/g, " ").trim();
@@ -1275,7 +1310,7 @@ function villsLine(){
   return `<div class="inhand"><div class="inhand-top"><span class="ttl">Na mão: você + ${S.vills.length}</span>
     <div class="stepper sm"><button type="button" data-act="vcount" data-d="-1" aria-label="Um adversário a menos">−</button><output>${S.vills.length}</output><button type="button" data-act="vcount" data-d="1" aria-label="Um adversário a mais">+</button></div></div>
     <div class="vlist">${S.vills.map((v, i) => `<button type="button" class="vchip ${S.editV === i ? "sel" : ""}" data-act="editv" data-n="${i}"><b>${v.label}</b><span>${pct(vShare(v))} das mãos</span></button>`).join("")}</div>
-    ${S.editV != null && S.vills[S.editV] ? `<p class="qhelp" style="margin:10px 0 6px">Como o <b>${S.vills[S.editV].label}</b> joga?</p><div class="chips">${[...(S.vills[S.editV].base.startsWith("pos:") || BASES[S.vills[S.editV].base] ? [S.vills[S.editV].base] : []), ...PROFILES].map(k => `<button type="button" class="chip ${S.vills[S.editV].base === k ? "sel" : ""}" data-act="vbase" data-k="${k}">${baseName(k)}</button>`).join("")}</div>` : ""}</div>`;
+    ${S.editV != null && S.vills[S.editV] ? `<p class="qhelp" style="margin:10px 0 6px">Como o <b>${S.vills[S.editV].label}</b> joga?</p><div class="chips">${[...(S.vills[S.editV].base.startsWith("pos:") || BASES[S.vills[S.editV].base] ? [S.vills[S.editV].base] : []), ...PROFILES].map(k => `<button type="button" class="chip ${S.vills[S.editV].base === k ? "sel" : ""}" data-act="vbase" data-k="${k}">${baseName(k)}</button>`).join("")}</div>${rangeEditor(S.editV)}` : ""}</div>`;
 }
 function postHTML(s, d, num){
   let h = `<section class="step cur" id="st-${s}"><div class="sh"><span class="badge">${num}</span><h2>${SNAME[s]}</h2><span class="sub">pote ${money(potNow(d))}</span></div>`;
@@ -1347,7 +1382,27 @@ function codeWeights(v){
   for (let i = 0; i < ALL_COMBOS.length; i++){ const [a, b] = ALL_COMBOS[i]; if (dead.has(a) || dead.has(b)) continue; const c = COMBO_CODE[i]; sum[c] = (sum[c] || 0) + v.w[i]; n[c] = (n[c] || 0) + 1; }
   return c => n[c] ? sum[c] / n[c] : 0;
 }
-function villChart(v, mine){ const cw = codeWeights(v); return chartGrid(c => { const w = cw(c); return w > 0.02 ? { cls: "vw", w } : "out"; }, mine).html; }
+function villChart(v, mine, vi){
+  const cw = codeWeights(v), ov = v.ov || {};
+  const html = chartGrid(c => { const w = cw(c), ed = ov[c] !== undefined ? " ed" : ""; return w > 0.02 ? { cls: "vw" + ed, w } : "out" + ed; }, mine).html;
+  if (vi == null) return html;
+  return html.replace(/<div class="rc ([^"]*)"([^>]*)>([^<]+)<\/div>/g, (m, cls, rest, code) => `<button type="button" class="rc ${cls}"${rest} data-act="vcell" data-n="${vi}" data-c="${code}" aria-label="${code}: ${cls.includes("out") ? "pôr no range" : "tirar do range"}">${code}</button>`);
+}
+function rangeEditor(vi){
+  const v = S.vills[vi]; if (!v) return "";
+  const board = boardFor(S.cur), code = heroOK() ? handCode(S.hero[0], S.hero[1]) : "", edited = Object.keys(v.ov).length || v.cuts.length;
+  let h = `<p class="qhelp" style="margin:12px 0 4px">Depois do flop, o <b>${v.label}</b> é:</p><div class="chips eg3">${Object.entries(STYLE).map(([k, o]) => `<button type="button" class="chip ${v.style === k ? "sel" : ""}" data-act="vstyle" data-n="${vi}" data-k="${k}">${o.name}<small class="chint">${o.hint}</small></button>`).join("")}</div>`;
+  if (board.length >= 3){
+    const bk = bucketsNow(v, board), cut = new Set(v.cuts.filter(c => c.board.length === board.length).map(c => c.k));
+    h += `<p class="qhelp" style="margin:12px 0 4px">O que ele pode ter aqui. Toque pra tirar o que ele <b>não</b> teria:</p><div class="chips eg2">${BUCKET_ORDER.filter(k => bk[k] > 0.004 || cut.has(k)).map(k => `<button type="button" class="chip ${cut.has(k) ? "cut" : ""}" data-act="vcut" data-n="${vi}" data-k="${k}">${BUCKET_NAME[k]}<small class="chint">${cut.has(k) ? "fora" : pct(bk[k])}</small></button>`).join("")}</div>`;
+    const vn = villainNow(board, v);
+    h += `<p class="beat">Você bate <b>${pct(1 - vn.ahead - vn.tie)}</b> do range dele${vn.tie > 0.005 ? ` (empata ${pct(vn.tie)})` : ""}.</p>`;
+  }
+  h += `<p class="qhelp" style="margin:12px 0 0">Toque numa mão da tabela pra tirar ou pôr no range.</p>${villChart(v, code, vi)}
+    <div class="rlegend"><span class="vil">Pode ter (mais forte = mais provável)</span><span class="out">Fora</span>${edited ? `<span class="edl">Ajustada por você</span>` : ""}</div>
+    ${edited ? `<button type="button" class="linkbtn" data-act="vreset" data-n="${vi}">↺ Voltar ao range automático</button>` : ""}`;
+  return h;
+}
 function renderResult(s){
   const el = $("res-" + s); if (!el) return;
   const d = S.st[s]; if (!d || S.end){ el.innerHTML = ""; return; }
@@ -1396,7 +1451,7 @@ function preBelow(v, d){
     const e = eqFor(S.hero, [], vl);
     h += `<button type="button" class="linkbtn more why" data-act="why">${S.ui.why ? "▾" : "▸"} Quem está na mão e o range deles</button>`;
     if (S.ui.why) h += `<div class="panel2"><p class="lead">${vl.map(x => `<b>${x.label}</b> (${baseName(x.base).toLowerCase()}, ${pct(vShare(x))} das mãos)`).join(" · ")}.${e ? ` Contra eles, ${code} ganha <b>${pct(e.eq)}</b> das vezes.` : ""}</p>
-      <p class="lead" style="margin-top:8px">Range de <b>${vl[0].label}</b>:</p>${villChart(vl[0], code)}<div class="rlegend"><span class="vil">Mãos que ele pode ter</span><span class="out">Fora do range</span></div></div>`;
+      <p class="lead" style="margin-top:8px">Range de <b>${vl[0].label}</b>:</p>${rangeEditor(0)}</div>`;
   }
   return h;
 }
@@ -1415,7 +1470,7 @@ function postBelow(s, v, d){
   for (let k = 8; k >= 0; k--){ const p = vn.cat[k]; if (p < 0.005) continue; bars += `<div class="bar vb ${k > vn.heroCat ? "ahead" : ""}"><span>${CAT_V[k]}</span><div class="t"><span style="width:${(p * 100).toFixed(1)}%"></span></div><em>${pct(p)}</em></div>`; }
   const tc = toCall(d), hasBet = tc > 0, c = hasBet ? callInfo(d).add : 0, P = potNow(d);
   const ev = hasBet ? e.eq * (P + c) - c : 0, L = left(), spr = L > 0 && P > 0 ? L / P : 0;
-  return h + `<div class="panel2"><h3>O que ${main.label} pode ter</h3><p class="lead">O range muda com o que ele fez. Em negrito, o que ganha do seu jogo.</p><div class="dist">${bars}</div>${villChart(main, code)}</div>
+  return h + `<div class="panel2"><h3>O que ${main.label} pode ter</h3><p class="lead">O range muda com o que ele fez. Em negrito, o que ganha do seu jogo.</p><div class="dist">${bars}</div>${S.editV === 0 ? `<p class="qhelp" style="margin-top:10px">Ajuste o range dele no painel <b>Na mão</b>, acima.</p>` : rangeEditor(0)}</div>
     <div class="panel2"><h3>Números</h3><dl class="kv">
       <div><dt>Você ganha / empata</dt><dd>${pct(e.win, 1)} / ${pct(e.tie, 1)}</dd></div>
       <div><dt>EV do call</dt><dd class="${hasBet ? (ev >= 0 ? "pos" : "neg") : ""}">${hasBet ? (ev >= 0 ? "+" : "") + money(ev) : "—"}</dd></div>
@@ -1507,6 +1562,20 @@ document.addEventListener("click", e => {
     }
     case "editv": { const i = +b.dataset.n; S.editV = S.editV === i ? null : i; break; }
     case "vbase": { const v = S.vills[S.editV]; if (v){ v.base = b.dataset.k; recalc(v); } break; }
+    case "vstyle": { const v = S.vills[+b.dataset.n]; if (v){ v.style = b.dataset.k; recalc(v); } break; }
+    case "vcut": {
+      const v = S.vills[+b.dataset.n], board = boardFor(S.cur), k = b.dataset.k; if (!v || board.length < 3) return;
+      const i = v.cuts.findIndex(c => c.k === k && c.board.length === board.length);
+      if (i >= 0) v.cuts.splice(i, 1); else v.cuts.push({ k, board: board.slice() });
+      recalc(v); break;
+    }
+    case "vcell": {
+      const v = S.vills[+b.dataset.n], c = b.dataset.c; if (!v) return;
+      if (v.ov[c] !== undefined) delete v.ov[c]; // segundo toque desfaz o seu ajuste
+      else v.ov[c] = codeWeights(v)(c) > 0.02 ? 0 : 1;
+      recalc(v); break;
+    }
+    case "vreset": { const v = S.vills[+b.dataset.n]; if (v){ v.ov = {}; v.cuts = []; recalc(v); } break; }
     // você
     case "hero": { if (!d) return; S.ui.why = false; const t = b.dataset.t, to = b.dataset.to ? +b.dataset.to : 0; if (s === "pre") preHero(t, to); else postHero(t, to); break; }
     case "heroamt": { if (!d) return; const v = val(); if (!(v > 0)) return; S.ui.custom = null; if (s === "pre") preHero("raise", v); else postHero("raise", v); break; }
